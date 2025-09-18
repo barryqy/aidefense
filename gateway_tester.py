@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 # AI Defense Gateway Interactive Tester
 
+import warnings
+import os
+# Set environment variable to suppress warnings
+os.environ['PYTHONWARNINGS'] = 'ignore::UserWarning'
+
+# Suppress all urllib3 warnings comprehensively
+warnings.filterwarnings('ignore')
+warnings.filterwarnings('ignore', category=UserWarning)
+warnings.filterwarnings('ignore', message='.*urllib3.*')
+
 import requests
 import json
 import time
@@ -8,6 +18,10 @@ import sys
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 import argparse
+
+# Disable urllib3 warnings directly
+import urllib3
+urllib3.disable_warnings()
 
 class AIDefenseGatewayTester:
     """Interactive CLI tool for testing AI Defense Gateway"""
@@ -89,7 +103,8 @@ class AIDefenseGatewayTester:
         """Make a request to the AI Defense Gateway"""
         headers = {
             'Content-Type': 'application/json',
-            'Authorization': f'Bearer {self.auth_token}'
+            'Authorization': f'Bearer {self.auth_token}',
+            'Accept-Encoding': 'identity'  # Disable gzip to avoid encoding issues
         }
         
         payload = {
@@ -114,19 +129,36 @@ class AIDefenseGatewayTester:
             
             # Handle different response scenarios
             if response.status_code == 200:
-                self.stats['successful_requests'] += 1
                 response_data = response.json()
+                content = response_data.get('choices', [{}])[0].get('message', {}).get('content', '')
                 
-                return {
-                    'status': 'success',
-                    'response_time': response_time,
-                    'response_code': response.status_code,
-                    'content': response_data.get('choices', [{}])[0].get('message', {}).get('content', ''),
-                    'model': response_data.get('model'),
-                    'usage': response_data.get('usage', {}),
-                    'raw_response': response_data,
-                    'blocked': False
-                }
+                # Check if AI Defense blocked the content by looking at the response
+                if any(keyword in content.lower() for keyword in ['violates rules', 'request violates', 'policy violation', 'blocked by']):
+                    self.stats['blocked_requests'] += 1
+                    return {
+                        'status': 'blocked',
+                        'response_time': response_time,
+                        'response_code': response.status_code,
+                        'content': content,
+                        'model': response_data.get('model'),
+                        'usage': response_data.get('usage', {}),
+                        'raw_response': response_data,
+                        'blocked': True,
+                        'security_action': 'content_blocked_by_ai_defense',
+                        'block_reason': content
+                    }
+                else:
+                    self.stats['successful_requests'] += 1
+                    return {
+                        'status': 'success',
+                        'response_time': response_time,
+                        'response_code': response.status_code,
+                        'content': content,
+                        'model': response_data.get('model'),
+                        'usage': response_data.get('usage', {}),
+                        'raw_response': response_data,
+                        'blocked': False
+                    }
             
             elif response.status_code in [400, 403, 429]:
                 # Check if this is a security block
@@ -242,6 +274,22 @@ class AIDefenseGatewayTester:
             except Exception as e:
                 print(f"\n❌ Unexpected error: {str(e)}")
     
+    def _clean_markdown(self, text: str) -> str:
+        """Clean up common Markdown formatting for terminal display"""
+        import re
+        
+        # Remove bold formatting **text** -> text
+        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+        
+        # Remove italic formatting *text* -> text (but be careful not to affect ** patterns)
+        text = re.sub(r'(?<!\*)\*(?!\*)([^*]+?)(?<!\*)\*(?!\*)', r'\1', text)
+        
+        # Clean up common Markdown patterns
+        text = re.sub(r'`([^`]+)`', r'\1', text)  # Remove code backticks
+        text = re.sub(r'#{1,6}\s*', '', text)     # Remove headers
+        
+        return text.strip()
+
     def display_result(self, result: Dict[str, Any], prompt: str):
         """Display the result of a gateway request"""
         print("\n" + "=" * 60)
@@ -249,7 +297,11 @@ class AIDefenseGatewayTester:
         if result['status'] == 'success':
             print("✅ REQUEST SUCCESSFUL - AI Defense Gateway Allowed")
             print(f"⏱️  Response Time: {result['response_time']:.2f}s")
-            print(f"🤖 Model: {result.get('model', 'mistral-large-latest')}")
+            model = result.get('model')
+            if model:
+                print(f"🤖 Model: {model}")
+            else:
+                print(f"🤖 Model: mistral-large-latest")
             
             usage = result.get('usage', {})
             if usage:
@@ -261,10 +313,14 @@ class AIDefenseGatewayTester:
             print("\n🤖 AI RESPONSE:")
             print("-" * 40)
             content = result['content']
-            if len(content) > 500:
-                print(content[:500] + "\n... [Response truncated - full response available]")
+            
+            # Clean up Markdown formatting for cleaner terminal display
+            cleaned_content = self._clean_markdown(content)
+            
+            if len(cleaned_content) > 500:
+                print(cleaned_content[:500] + "\n... [Response truncated - full response available]")
             else:
-                print(content)
+                print(cleaned_content)
             
         elif result['status'] == 'blocked':
             print("🛡️  REQUEST BLOCKED BY AI DEFENSE GATEWAY")
