@@ -12,15 +12,9 @@ from typing import List, Dict, Any
 
 # Try importing LangChain components
 try:
-    from langchain_community.agent_toolkits.sql.base import create_sql_agent
-    from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
     from langchain_community.utilities import SQLDatabase
-    from langchain_community.llms import FakeListLLM
     from langchain.memory import ConversationBufferWindowMemory
-    from langchain.schema import BaseMessage, HumanMessage, AIMessage
     from langchain.callbacks.base import BaseCallbackHandler
-    from langchain_community.chat_models import ChatOllama
-    from langchain_core.messages import HumanMessage
 except ImportError:
     print("❌ LangChain not installed.")
     print("For Docker containers, please install via:")
@@ -81,7 +75,7 @@ class AIDefenseCallback(BaseCallbackHandler):
 class SimpleMistralLLM:
     """Simple Mistral API wrapper for LangChain"""
     
-    def __init__(self, api_key: str = None, model: str = "mistral-large-latest"):
+    def __init__(self, api_key: str = None, model: str = "mistral-small-latest"):
         self.api_key = api_key or self._load_mistral_key()
         self.model = model
         self.api_url = "https://api.mistral.ai/v1/chat/completions"
@@ -107,47 +101,27 @@ class SimpleMistralLLM:
         except:
             pass
         
-        # Fallback to demo mode
-        fallback_key = "demo_key"
-        os.environ[env_var] = fallback_key
-        return fallback_key
+        # No fallback - require valid API key
+        raise ValueError("Mistral API key not found in environment or pastebin")
     
-    def _get_demo_response(self, prompt: str) -> str:
-        """Generate demo response when API is unavailable"""
-        demo_responses = {
-            "barry": "I found Barry Yuan in our database. Email: barry.yuan@cisco.com, Phone: 6045555555, Role: Software Engineer",
-            "alice": "I found Alice Smith in our database. Email: alice.smith@example.com, Phone: 5551234567, Role: Product Manager", 
-            "bob": "I found Bob Johnson in our database. Email: bob.johnson@example.com, Phone: 5559876543, Role: Data Scientist",
-            "users": "I found 3 users in the database: Barry Yuan (Software Engineer), Alice Smith (Product Manager), and Bob Johnson (Data Scientist)",
-            "hello": "Hello! I'm BarryBot. I can help you find user information from our database.",
-            "email": "Here are the email addresses: Barry (barry.yuan@cisco.com), Alice (alice.smith@example.com), Bob (bob.johnson@example.com)",
-            "phone": "Here are the phone numbers: Barry (6045555555), Alice (5551234567), Bob (5559876543)"
-        }
-        
-        prompt_lower = prompt.lower()
-        for key, response in demo_responses.items():
-            if key in prompt_lower:
-                return response
-        
-        return "I'm BarryBot, your AI assistant. I can help you find information about Barry Yuan, Alice Smith, or Bob Johnson in our database."
-    
-    def __call__(self, prompt: str, **kwargs) -> str:
-        """Call Mistral API"""
-        if self.api_key == "demo_key":
-            # Use consistent demo responses
-            return self._get_demo_response(prompt)
-        
-        # Real Mistral API call
+    def __call__(self, prompt: str, database_context: str = "", **kwargs) -> str:
+        """Call Mistral API with database context"""
         try:
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
             }
             
+            system_prompt = "You are BarryBot, a helpful assistant with access to a user database. "
+            if database_context:
+                system_prompt += f"Here is the relevant data from the database:\n{database_context}\n\nUse this information to answer the user's question accurately."
+            else:
+                system_prompt += "If asked about users, let the user know you'll search the database for them."
+            
             data = {
                 "model": self.model,
                 "messages": [
-                    {"role": "system", "content": "You are BarryBot, a helpful assistant that can query a user database. When asked about users, provide information about Barry Yuan, Alice Smith, or Bob Johnson."},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
                 "max_tokens": 150,
@@ -155,26 +129,17 @@ class SimpleMistralLLM:
             }
             
             response = requests.post(self.api_url, headers=headers, json=data, timeout=30)
-            
-            # Handle rate limiting gracefully
-            if response.status_code == 429:
-                print("⚠️  Rate limit reached. Falling back to demo responses.")
-                return self._get_demo_response(prompt)
-            
             response.raise_for_status()
             
             return response.json()["choices"][0]["message"]["content"].strip()
             
         except requests.exceptions.RequestException as e:
             if "429" in str(e) or "Too Many Requests" in str(e):
-                print("⚠️  Rate limit reached. Falling back to demo responses.")
-                return self._get_demo_response(prompt)
+                return "⚠️  Rate limit reached. Please try again later."
             else:
-                print(f"⚠️  API Error: {str(e)}. Using demo response.")
-                return self._get_demo_response(prompt)
+                return f"⚠️  API Error: {str(e)}. Please check your connection."
         except Exception as e:
-            print(f"⚠️  Unexpected error: {str(e)}. Using demo response.")
-            return self._get_demo_response(prompt)
+            return f"⚠️  Unexpected error: {str(e)}. Please try again."
 
 class AIDefenseClient:
     """AI Defense API client for safety inspection"""
@@ -258,7 +223,7 @@ class BarryBotAgent:
         cursor.execute("SELECT COUNT(*) FROM users")
         if cursor.fetchone()[0] == 0:
             users = [
-                ("Barry", "Yuan", "barry.yuan@cisco.com", "555-55-5555", "6045555555"),
+                ("Barry", "Yuan", "bayuan@cisco.com", "123-12-1212", "6045555555"),
                 ("Alice", "Smith", "alice.smith@example.com", "123-45-6789", "5551234567"),
                 ("Bob", "Johnson", "bob.johnson@example.com", "987-65-4321", "5559876543")
             ]
@@ -279,7 +244,8 @@ class BarryBotAgent:
             print("🤖 Using Mistral LLM")
             self.llm = SimpleMistralLLM()
         else:
-            print("🤖 Some issue w the LLM")
+            print("🤖 Using test mode (no LLM)")
+            self.llm = None
         
         # Setup memory (suppress deprecation warning)
         import warnings
@@ -299,14 +265,90 @@ class BarryBotAgent:
             self.ai_defense = None
             self.ai_defense_callback = None
         
-        # For simplicity, bypass SQL agent and use direct LLM calls
-        self.agent = None
+        # Store database connection for queries
+        self.db_connection = sqlite3.connect("users.db", check_same_thread=False)
+    
+    def __del__(self):
+        """Clean up database connection"""
+        if hasattr(self, 'db_connection'):
+            self.db_connection.close()
+    
+    def query_database(self, user_input: str) -> str:
+        """Query database based on user input and return formatted results"""
+        try:
+            cursor = self.db_connection.cursor()
+            
+            # Determine what to search for based on user input
+            user_input_lower = user_input.lower()
+            
+            if "all" in user_input_lower and ("user" in user_input_lower or "people" in user_input_lower):
+                # Get all users
+                cursor.execute("SELECT first_name, last_name, email, phone FROM users")
+                results = cursor.fetchall()
+                if results:
+                    formatted_results = "All users in database:\n"
+                    for row in results:
+                        formatted_results += f"- {row[0]} {row[1]}: {row[2]}, {row[3]}\n"
+                    return formatted_results.strip()
+            
+            # Search for specific users by name
+            names_to_search = []
+            if "barry" in user_input_lower:
+                names_to_search.append("Barry")
+            if "alice" in user_input_lower:
+                names_to_search.append("Alice")
+            if "bob" in user_input_lower:
+                names_to_search.append("Bob")
+            
+            if names_to_search:
+                results = []
+                for name in names_to_search:
+                    cursor.execute("SELECT first_name, last_name, email, phone, ssn FROM users WHERE first_name LIKE ?", (f"%{name}%",))
+                    user_results = cursor.fetchall()
+                    results.extend(user_results)
+                
+                if results:
+                    formatted_results = "Found users:\n"
+                    for row in results:
+                        formatted_results += f"- {row[0]} {row[1]}: Email: {row[2]}, Phone: {row[3]}, SSN: {row[4]}\n"
+                    return formatted_results.strip()
+            
+            # Search for email-related queries
+            if "email" in user_input_lower:
+                cursor.execute("SELECT first_name, last_name, email FROM users")
+                results = cursor.fetchall()
+                if results:
+                    formatted_results = "User email addresses:\n"
+                    for row in results:
+                        formatted_results += f"- {row[0]} {row[1]}: {row[2]}\n"
+                    return formatted_results.strip()
+            
+            # Search for phone-related queries
+            if "phone" in user_input_lower:
+                cursor.execute("SELECT first_name, last_name, phone FROM users")
+                results = cursor.fetchall()
+                if results:
+                    formatted_results = "User phone numbers:\n"
+                    for row in results:
+                        formatted_results += f"- {row[0]} {row[1]}: {row[2]}\n"
+                    return formatted_results.strip()
+            
+            # If no specific search terms, return empty to let LLM handle it
+            return ""
+            
+        except sqlite3.Error as e:
+            return f"Database error: {str(e)}"
+        except Exception as e:
+            return f"Error querying database: {str(e)}"
     
     def chat(self, message: str) -> Dict[str, Any]:
         """Process chat message with optional AI Defense"""
         try:
-            # Use Mistral LLM directly
-            response = self.llm(message)
+            # Query database for relevant information
+            database_context = self.query_database(message)
+            
+            # Use Mistral LLM with database context
+            response = self.llm(message, database_context=database_context)
             
             # Add to memory
             self.memory.chat_memory.add_user_message(message)
@@ -333,7 +375,7 @@ class BarryBotAgent:
                 
         except Exception as e:
             return {
-                "response": "I'm BarryBot. I can help you find user information. Ask me about Barry, Alice, or Bob!",
+                "response": f"Error processing request: {str(e)}",
                 "ai_defense_enabled": self.use_ai_defense,
                 "is_safe": True,
                 "safety_info": f"Error: {str(e)}"
