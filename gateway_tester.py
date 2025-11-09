@@ -119,10 +119,19 @@ class AIDefenseGatewayTester:
                             plaintext = dec_bytes.decode('utf-8')
                             
                             parts = plaintext.split(':')
+                            
+                            # Try to get gateway auth token from part 3
                             if len(parts) > 3:
                                 token = parts[3]
                                 if token and token != "none":
                                     return token
+                            
+                            # Fallback: Use Mistral API key (part 1) as gateway auth token
+                            # The gateway uses the Mistral API key for authentication
+                            if len(parts) > 1:
+                                mistral_key = parts[1]
+                                if mistral_key and mistral_key != "none":
+                                    return mistral_key
         except Exception:
             pass
         
