@@ -38,10 +38,8 @@ class AIDefenseGatewayTester:
         # Build the full gateway URL dynamically
         self.gateway_url = f"{self.gateway_base_url}/{self.tenant_id}/connections/{self.connection_id}/v1/chat/completions"
         
-        # Bearer token for gateway authentication (loaded from environment)
-        self.auth_token = os.environ.get('GATEWAY_AUTH_TOKEN')
-        if not self.auth_token:
-            raise ValueError("Gateway auth token not found. Please set GATEWAY_AUTH_TOKEN environment variable.")
+        # Bearer token for gateway authentication
+        self.auth_token = self._load_auth_token()
         
         # Statistics tracking
         self.stats = {
@@ -57,7 +55,7 @@ class AIDefenseGatewayTester:
         self.test_scenarios = self._get_test_scenarios()
     
     def _load_connection_id(self):
-        """Load Gateway connection ID from environment or cache"""
+        """Load gateway connection ID from cache"""
         import base64
         
         # Try environment variable first
@@ -65,22 +63,70 @@ class AIDefenseGatewayTester:
         if conn_id:
             return conn_id
         
-        # Try loading from cache file
+        # Load from session cache
         try:
             cache_file = ".aidefense/.cache"
+            env_key = os.environ.get('DEVENV_USER', 'default-key-fallback')
+            
             if os.path.exists(cache_file):
                 with open(cache_file, 'r') as f:
                     for line in f:
-                        if line.startswith('request_id='):
+                        line = line.strip()
+                        if line.startswith('session_token='):
                             encoded = line.split('=', 1)[1].strip()
-                            decoded = base64.b64decode(encoded).decode('utf-8')
-                            # Check if it's a valid connection ID (not "none")
-                            if decoded != "none":
-                                return decoded
+                            enc_bytes = base64.b64decode(encoded)
+                            
+                            # Decode session data
+                            key_rep = (env_key * (len(enc_bytes) // len(env_key) + 1))[:len(enc_bytes)]
+                            dec_bytes = bytes(a ^ b for a, b in zip(enc_bytes, key_rep.encode()))
+                            plaintext = dec_bytes.decode('utf-8')
+                            
+                            parts = plaintext.split(':')
+                            if len(parts) > 2:
+                                conn_id = parts[2]
+                                if conn_id and conn_id != "none":
+                                    return conn_id
         except Exception:
             pass
         
         raise ValueError("Gateway connection ID not found. Run '0-init-lab.sh' first to set up credentials.")
+    
+    def _load_auth_token(self):
+        """Load gateway auth token from cache"""
+        import base64
+        
+        # Try environment variable first
+        token = os.environ.get('GATEWAY_AUTH_TOKEN')
+        if token:
+            return token
+        
+        # Load from session cache
+        try:
+            cache_file = ".aidefense/.cache"
+            env_key = os.environ.get('DEVENV_USER', 'default-key-fallback')
+            
+            if os.path.exists(cache_file):
+                with open(cache_file, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith('session_token='):
+                            encoded = line.split('=', 1)[1].strip()
+                            enc_bytes = base64.b64decode(encoded)
+                            
+                            # Decode session data
+                            key_rep = (env_key * (len(enc_bytes) // len(env_key) + 1))[:len(enc_bytes)]
+                            dec_bytes = bytes(a ^ b for a, b in zip(enc_bytes, key_rep.encode()))
+                            plaintext = dec_bytes.decode('utf-8')
+                            
+                            parts = plaintext.split(':')
+                            if len(parts) > 3:
+                                token = parts[3]
+                                if token and token != "none":
+                                    return token
+        except Exception:
+            pass
+        
+        raise ValueError("Gateway auth token not found. Run '0-init-lab.sh' first to set up credentials.")
     
     def _get_test_scenarios(self):
         """Get test scenarios for automated testing"""

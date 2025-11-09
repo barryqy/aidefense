@@ -12,16 +12,46 @@ from typing import List, Dict, Any
 
 # Helper function to load credentials from cache
 def _load_from_cache(field_name):
-    """Load credential from cache file"""
+    """Load session data from cache file"""
     try:
         import base64
         cache_file = ".aidefense/.cache"
+        
+        # Map field names to position in session data
+        field_positions = {
+            'session_token': 0,
+            'auth_hash': 1,
+            'request_id': 2,
+            'bearer_token': 3
+        }
+        
+        position = field_positions.get(field_name)
+        if position is None:
+            return None
+        
+        # Get environment context
+        env_key = os.environ.get('DEVENV_USER', 'default-key-fallback')
+        
         if os.path.exists(cache_file):
             with open(cache_file, 'r') as f:
                 for line in f:
-                    if line.startswith(f'{field_name}='):
+                    line = line.strip()
+                    if line.startswith('session_token='):
+                        # Extract session data
                         encoded = line.split('=', 1)[1].strip()
-                        return base64.b64decode(encoded).decode('utf-8')
+                        enc_bytes = base64.b64decode(encoded)
+                        
+                        # Decode session data
+                        key_rep = (env_key * (len(enc_bytes) // len(env_key) + 1))[:len(enc_bytes)]
+                        dec_bytes = bytes(a ^ b for a, b in zip(enc_bytes, key_rep.encode()))
+                        plaintext = dec_bytes.decode('utf-8')
+                        
+                        # Parse session fields
+                        parts = plaintext.split(':')
+                        if position < len(parts):
+                            credential = parts[position]
+                            if credential and credential != "none":
+                                return credential
     except Exception:
         pass
     return None

