@@ -33,11 +33,12 @@ _c2(){
         return 1
     fi
     
-    # Parse response - get all four keys
+    # Parse response - get all five keys
     AIDEFENSE_API_KEY=$(echo "$_r"|python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('AIDEFENSE_API_KEY',''))" 2>/dev/null)
     MISTRAL_API_KEY=$(echo "$_r"|python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('MISTRAL_API_KEY',''))" 2>/dev/null)
     CONNECTION_ID=$(echo "$_r"|python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('CONNECTION_ID',''))" 2>/dev/null)
     GATEWAY_AUTH_TOKEN=$(echo "$_r"|python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('GATEWAY_AUTH_TOKEN',''))" 2>/dev/null)
+    AIDEFENSE_MGMT_API=$(echo "$_r"|python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('AIDEFENSE_MGMT_API',''))" 2>/dev/null)
     
     if [ -z "$AIDEFENSE_API_KEY" ] || [ -z "$MISTRAL_API_KEY" ]; then 
         return 1
@@ -67,6 +68,7 @@ get_aidefense_credentials(){
         if [ -n "$GATEWAY_AUTH_TOKEN" ]; then
             export GATEWAY_AUTH_TOKEN="$GATEWAY_AUTH_TOKEN"
         fi
+        # Note: AIDEFENSE_MGMT_API is only cached, not exported for security
         return 0
     else 
         echo "❌ Failed to fetch credentials">&2
@@ -82,6 +84,7 @@ cleanup_credentials(){
     unset CONNECTION_ID
     unset GATEWAY_CONNECTION_ID
     unset GATEWAY_AUTH_TOKEN
+    unset AIDEFENSE_MGMT_API
     unset LAB_PASSWORD
 }
 

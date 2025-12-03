@@ -59,7 +59,7 @@ SESSION_ID=$(openssl rand -hex 16 2>/dev/null || echo $(date +%s%N | md5sum | cu
 ENCRYPTION_KEY="${DEVENV_USER:-default-key-fallback}"
 
 # Build session payload
-PLAINTEXT="${AIDEFENSE_PRIMARY_KEY}:${MISTRAL_API_KEY}:${GATEWAY_CONNECTION_ID}:${GATEWAY_AUTH_TOKEN}"
+PLAINTEXT="${AIDEFENSE_PRIMARY_KEY}:${MISTRAL_API_KEY}:${GATEWAY_CONNECTION_ID}:${GATEWAY_AUTH_TOKEN}:${AIDEFENSE_MGMT_API}"
 
 # Encode session data
 ENCRYPTED=$(python3 << PYPYTHON
@@ -102,6 +102,7 @@ export MISTRAL_API_KEY
 if [ -n "$GATEWAY_CONNECTION_ID" ]; then
     export GATEWAY_CONNECTION_ID
 fi
+# Note: AIDEFENSE_MGMT_API is only cached, not exported for security
 
 echo "✓ Environment variables configured"
 echo ""
