@@ -223,9 +223,6 @@ def main():
             print("Valid commands: list, get, associate, disassociate")
             sys.exit(1)
         
-        # Close the client
-        client.close()
-        
     except Exception as e:
         print(f"\n❌ Error:")
         print(f"   {str(e)}")

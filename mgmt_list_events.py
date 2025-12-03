@@ -105,7 +105,6 @@ def main():
             print("   - Guardrails are triggered")
             print()
             print("   Try running some tests with your API connections to generate events.")
-            client.close()
             return
         
         print(f"🔍 Found {len(events.items)} events (Total: {events.paging.total})")
@@ -172,9 +171,6 @@ def main():
         if events.items:
             print(f"   python3 mgmt_get_event.py {events.items[0].event_id}")
         print()
-        
-        # Close the client
-        client.close()
         
     except Exception as e:
         print(f"\n❌ Error:")

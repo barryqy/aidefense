@@ -89,8 +89,11 @@ def main():
                     print(f"   ID: {app.application_id}")
                     if app.description:
                         print(f"   Description: {app.description}")
-                    print(f"   Connection Type: {app.connection_type.value if app.connection_type else 'N/A'}")
-                    if app.created_at:
+                    # Handle connection_type which might be enum or string
+                    if hasattr(app, 'connection_type') and app.connection_type:
+                        conn_type = app.connection_type.value if hasattr(app.connection_type, 'value') else str(app.connection_type)
+                        print(f"   Connection Type: {conn_type}")
+                    if hasattr(app, 'created_at') and app.created_at:
                         print(f"   Created: {app.created_at}")
                 
                 print(f"\n   Total: {apps_resp.applications.paging.total} applications")
@@ -114,8 +117,7 @@ def main():
                     print(f"\n{i}. {conn.connection_name}{lab_marker}")
                     print(f"   Connection ID: {conn.connection_id}")
                     print(f"   Application ID: {conn.application_id}")
-                    print(f"   Type: {conn.connection_type.value if conn.connection_type else 'N/A'}")
-                    if conn.created_at:
+                    if hasattr(conn, 'created_at') and conn.created_at:
                         print(f"   Created: {conn.created_at}")
                     
                     # Try to get API keys count
@@ -189,9 +191,6 @@ def main():
             pass
         
         print()
-        
-        # Close the client
-        client.close()
         
     except Exception as e:
         print(f"\n❌ Error:")

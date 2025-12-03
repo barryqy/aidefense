@@ -186,9 +186,6 @@ def main():
         
         print()
         
-        # Close the client
-        client.close()
-        
     except Exception as e:
         print(f"\n❌ Error during cleanup:")
         print(f"   {str(e)}")

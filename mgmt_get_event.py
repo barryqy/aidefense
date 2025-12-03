@@ -179,9 +179,6 @@ def main():
         
         print()
         
-        # Close the client
-        client.close()
-        
     except Exception as e:
         print(f"\n❌ Error:")
         print(f"   {str(e)}")

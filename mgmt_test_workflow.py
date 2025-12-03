@@ -269,9 +269,6 @@ def main():
         print(f"  - Generated {len(events.items) if events.items else 0} events")
         print()
         
-        # Close clients
-        mgmt_client.close()
-        
     except Exception as e:
         print(f"\n❌ Error during workflow:")
         print(f"   {str(e)}")

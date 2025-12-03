@@ -191,9 +191,6 @@ def main():
         print("      python3 mgmt_list_resources.py")
         print()
         
-        # Close the client
-        client.close()
-        
     except Exception as e:
         print(f"\n❌ Error creating connection:")
         print(f"   {str(e)}")
