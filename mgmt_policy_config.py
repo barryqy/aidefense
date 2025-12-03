@@ -78,34 +78,46 @@ def get_policy(client, policy_id):
     print("=" * 70)
     print()
     
-    policy = client.policies.get_policy(policy_id, expanded=True)
+    try:
+        # Try without expanded first to avoid API 500 errors
+        policy = client.policies.get_policy(policy_id, expanded=False)
+    except Exception as e:
+        print(f"❌ Error retrieving policy: {e}")
+        return
     
     print(f"Name: {policy.policy_name}")
     print(f"ID: {policy.policy_id}")
-    if policy.description:
+    if hasattr(policy, 'description') and policy.description:
         print(f"Description: {policy.description}")
-    print(f"Status: {policy.status}")
+    if hasattr(policy, 'status') and policy.status:
+        print(f"Status: {policy.status}")
     print()
     
-    # Display guardrails
-    if hasattr(policy, 'guardrails') and policy.guardrails and policy.guardrails.items:
-        print("Guardrails:")
-        for guardrail in policy.guardrails.items:
-            print(f"  - Type: {guardrail.guardrails_type}")
-            if hasattr(guardrail, 'description') and guardrail.description:
-                print(f"    Description: {guardrail.description}")
-            if hasattr(guardrail, 'action') and guardrail.action:
-                print(f"    Action: {guardrail.action}")
-        print()
+    # Display guardrails if available
+    if hasattr(policy, 'guardrails') and policy.guardrails:
+        if hasattr(policy.guardrails, 'items') and policy.guardrails.items:
+            print(f"Guardrails ({len(policy.guardrails.items)}):")
+            for guardrail in policy.guardrails.items:
+                print(f"  - Type: {guardrail.guardrails_type}")
+                if hasattr(guardrail, 'description') and guardrail.description:
+                    print(f"    Description: {guardrail.description}")
+                if hasattr(guardrail, 'action') and guardrail.action:
+                    print(f"    Action: {guardrail.action}")
+            print()
     
-    # Display connections
+    # Display connections if available
     if hasattr(policy, 'connections') and policy.connections:
-        if policy.connections.items:
+        if hasattr(policy.connections, 'items') and policy.connections.items:
             print(f"Associated Connections ({len(policy.connections.items)}):")
             for conn in policy.connections.items:
-                print(f"  - {conn.connection_name} ({conn.connection_id})")
+                conn_name = conn.connection_name if hasattr(conn, 'connection_name') else 'Unknown'
+                conn_id = conn.connection_id if hasattr(conn, 'connection_id') else 'Unknown'
+                print(f"  - {conn_name} ({conn_id})")
         else:
             print("Associated Connections: None")
+    
+    print()
+    print("💡 Tip: View this policy in the AI Defense dashboard for complete details")
 
 
 def associate_connection(client, policy_id, connection_id):
