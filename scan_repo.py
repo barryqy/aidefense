@@ -65,7 +65,9 @@ def print_threats(techniques, indent=0):
             if sub_technique.items:
                 print(f"{indent_str}  │  └─ Detections:")
                 for threat in sub_technique.items:
-                    print(f"{indent_str}  │     • {threat.threat_type.value}")
+                    # Handle threat_type - can be enum or string
+                    threat_type = threat.threat_type.value if hasattr(threat.threat_type, 'value') else str(threat.threat_type)
+                    print(f"{indent_str}  │     • {threat_type}")
                     if threat.details:
                         print(f"{indent_str}  │       Details: {threat.details}")
             print(f"{indent_str}  │")
@@ -89,13 +91,14 @@ def main():
         print("Please run: source 0-init-lab.sh")
         sys.exit(1)
     
-    # Get HuggingFace token from environment
+    # Get HuggingFace token from environment (optional - only needed for private repos)
     hf_token = os.getenv("HUGGINGFACE_TOKEN")
     if not hf_token:
-        print("❌ Error: HUGGINGFACE_TOKEN not found")
-        print("Get a token at: https://huggingface.co/settings/tokens")
-        print("Then set it: export HUGGINGFACE_TOKEN='hf_your_token'")
-        sys.exit(1)
+        print("ℹ️  Note: No HUGGINGFACE_TOKEN found")
+        print("   Public repositories can be scanned without a token.")
+        print("   For private repos, get a token at: https://huggingface.co/settings/tokens")
+        print("   Then set it: export HUGGINGFACE_TOKEN='hf_your_token'")
+        print()
     
     print("=" * 60)
     print("AI DEFENSE REPOSITORY SCANNER")
@@ -117,11 +120,18 @@ def main():
         )
         
         # Configure repository scan
-        repo_config = ModelRepoConfig(
-            url=repo_url,
-            type=URLType.HUGGING_FACE,
-            auth=Auth(huggingface=HuggingFaceAuth(access_token=hf_token))
-        )
+        # Only include auth if token is provided
+        if hf_token:
+            repo_config = ModelRepoConfig(
+                url=repo_url,
+                type=URLType.HUGGING_FACE,
+                auth=Auth(huggingface=HuggingFaceAuth(access_token=hf_token))
+            )
+        else:
+            repo_config = ModelRepoConfig(
+                url=repo_url,
+                type=URLType.HUGGING_FACE
+            )
         
         # Scan the repository
         print("⏳ Downloading and scanning repository... (this may take several minutes)")
@@ -131,9 +141,15 @@ def main():
         print("SCAN RESULTS")
         print("=" * 60)
         print(f"🔑 Scan ID: {result.scan_id}")
-        print(f"📊 Status: {result.status.value}")
+        
+        # Handle status - can be enum or string
+        status_str = result.status.value if hasattr(result.status, 'value') else str(result.status)
+        print(f"📊 Status: {status_str}")
         print(f"📅 Created: {result.created_at}")
-        print(f"✅ Completed: {result.completed_at}")
+        
+        # Only print completed_at if it exists and is not None
+        if result.completed_at:
+            print(f"✅ Completed: {result.completed_at}")
         
         if result.status == ScanStatus.COMPLETED:
             # Display repository info
@@ -168,7 +184,10 @@ def main():
                     clean_count += 1
                 
                 print(f"\n{status_icon} {item.name} ({item.size} bytes)")
-                print(f"  Status: {item.status.value}")
+                
+                # Handle status - can be enum or string
+                item_status = item.status.value if hasattr(item.status, 'value') else str(item.status)
+                print(f"  Status: {item_status}")
                 
                 if item.reason:
                     print(f"  Reason: {item.reason}")
@@ -193,7 +212,9 @@ def main():
         elif result.status == ScanStatus.FAILED:
             print("❌ Scan failed")
         else:
-            print(f"ℹ️  Scan status: {result.status.value}")
+            # Handle status - can be enum or string
+            status_str = result.status.value if hasattr(result.status, 'value') else str(result.status)
+            print(f"ℹ️  Scan status: {status_str}")
             
     except Exception as e:
         print(f"\n❌ Error during scan:")
