@@ -75,8 +75,10 @@ except ImportError:
         print("   pip3 install --ignore-installed --force-reinstall langchain langchain-community")
         sys.exit(1)
     
-    print("✅ Installation completed. Please run the script again.")
-    sys.exit(1)
+    print("✅ Installation completed. Continuing with script execution...")
+    # Import the newly installed modules
+    from langchain.memory import ConversationBufferWindowMemory
+    from langchain.callbacks.base import BaseCallbackHandler
 
 # Try importing Mistral (via Ollama or API)
 try:

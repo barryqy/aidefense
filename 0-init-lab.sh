@@ -111,14 +111,11 @@ echo "════════════════════════�
 echo "✅ Lab initialization complete!"
 echo "════════════════════════════════════════════════════════════"
 echo ""
-echo "💡 You can now run the AI Defense lab scripts:"
-echo "   • python3 ai_agent.py              (BarryBot with AI Defense SDK)"
-echo "   • python3 gateway_tester.py        (Gateway testing tool)"
-echo ""
+echo "💡 You can now run the AI Defense lab scripts following the lab guide"
 
 # Clean up sensitive variables from memory
 cleanup_credentials
 
-echo "📌 Note: Credentials are cached. To refresh, re-run this script."
+echo "✅ Note: Credentials are cached. To refresh, re-run this script."
 echo ""
 
