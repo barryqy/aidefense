@@ -263,9 +263,10 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python3 aidefense_api.py --environment-validation    Validate API connectivity
-  python3 aidefense_api.py --threat-simulation         Run threat detection tests
-  python3 aidefense_api.py --prompt-inspection         Interactive prompt testing
+  python3 aidefense_api.py --environment-validation              Validate API connectivity
+  python3 aidefense_api.py --threat-simulation                   Run threat detection tests
+  python3 aidefense_api.py --prompt-inspection                   Interactive prompt testing
+  python3 aidefense_api.py --prompt-inspection "test prompt"     Test a single prompt
 
 Contact: bayuan@cisco.com for questions and issues
         """
@@ -285,8 +286,10 @@ Contact: bayuan@cisco.com for questions and issues
     
     parser.add_argument(
         '--prompt-inspection',
-        action='store_true',
-        help='Interactive prompt inspection mode'
+        type=str,
+        nargs='?',
+        const='interactive',
+        help='Prompt inspection mode - provide a prompt to test, or run interactively'
     )
     
     args = parser.parse_args()
@@ -311,7 +314,24 @@ Contact: bayuan@cisco.com for questions and issues
         elif args.threat_simulation:
             api.threat_simulation()
         elif args.prompt_inspection:
-            api.prompt_inspection_demo()
+            if args.prompt_inspection == 'interactive':
+                # Interactive mode
+                api.prompt_inspection_demo()
+            else:
+                # Single prompt mode
+                prompt = args.prompt_inspection
+                print(f"\n🔍 Testing prompt: \"{prompt}\"\n")
+                try:
+                    result = api.chat_client.inspect_prompt(prompt)
+                    status = "🟢 SAFE" if result.is_safe else "🔴 THREAT DETECTED"
+                    print(f"Result: {status}")
+                    print(f"Classifications: {result.classifications or 'None'}")
+                    if result.rules:
+                        print("Triggered security rules:")
+                        for rule in result.rules:
+                            print(f"  • {rule.rule_name}: {rule.classification}")
+                except Exception as e:
+                    print(f"❌ Error: {str(e)}")
             
     except KeyboardInterrupt:
         print("\n\n👋 Goodbye!")
