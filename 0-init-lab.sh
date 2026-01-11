@@ -112,7 +112,7 @@ echo "🔧 Installing AI Agent dependencies in background..."
 
 {
     # Install to system Python (Docker-compatible)
-    python3 -m pip install --quiet --break-system-packages langchain langchain-community langchain-mistralai 2>&1
+    python3 -m pip install --quiet --upgrade --break-system-packages langchain langchain-community 2>&1
     
     # Create a completion marker
     mkdir -p .aidefense
