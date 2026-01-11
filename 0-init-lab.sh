@@ -19,10 +19,22 @@ read -sp "👉 Enter lab password: " LAB_PASSWORD
 echo ""
 echo ""
 
+# Validate password
 if [ -z "$LAB_PASSWORD" ]; then
     echo "❌ Password cannot be empty"
     exit 1
 fi
+
+# Check password length (max 20 characters to prevent memory issues)
+PASSWORD_LENGTH=${#LAB_PASSWORD}
+if [ "$PASSWORD_LENGTH" -gt 20 ]; then
+    echo "❌ Password too long (max 20 characters)"
+    echo "   If you pasted something by mistake, please try again"
+    exit 1
+fi
+
+# Sanitize password - remove any control characters that could cause issues
+LAB_PASSWORD=$(echo "$LAB_PASSWORD" | tr -cd '[:print:]')
 
 export LAB_PASSWORD
 
@@ -110,17 +122,11 @@ echo ""
 # Install LangChain dependencies in the background for Module 3
 echo "🔧 Installing AI Agent dependencies in background..."
 
-{
-    # Install to system Python (Docker-compatible)
-    python3 -m pip install --quiet --upgrade --break-system-packages langchain langchain-community 2>&1
-    
-    # Create a completion marker
-    mkdir -p .aidefense
-    touch .aidefense/.langchain_ready
-} > /dev/null 2>&1 &
+# Create .aidefense directory first so ai_agent.py can detect background install
+mkdir -p .aidefense
 
-# Disown to prevent job completion messages
-disown
+# Run in true background with nohup
+nohup sh -c 'pip3 install --ignore-installed langchain langchain-community > /dev/null 2>&1 && touch .aidefense/.langchain_ready' > /dev/null 2>&1 &
 
 echo "✓ Dependency installation started in background"
 echo ""
