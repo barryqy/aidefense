@@ -110,15 +110,11 @@ echo ""
 # Install LangChain dependencies in the background for Module 3
 echo "🔧 Installing AI Agent dependencies in background..."
 (
-    # Create virtual environment if it doesn't exist
-    if [ ! -d "venv" ]; then
-        python3 -m venv venv >/dev/null 2>&1
-    fi
-    
-    # Install LangChain and dependencies silently
-    ./venv/bin/pip install --quiet langchain langchain-community langchain-mistralai >/dev/null 2>&1
+    # Install to user site-packages (no venv needed)
+    python3 -m pip install --user --quiet langchain langchain-community langchain-mistralai >/dev/null 2>&1
     
     # Create a completion marker
+    mkdir -p .aidefense
     touch .aidefense/.langchain_ready 2>/dev/null
 ) &
 
