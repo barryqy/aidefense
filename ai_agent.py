@@ -65,35 +65,37 @@ except ImportError:
     import subprocess
     
     # Check if background installation from init script is running
-    venv_path = os.path.join(os.path.dirname(__file__), 'venv')
     marker_file = os.path.join(os.path.dirname(__file__), '.aidefense', '.langchain_ready')
     
-    # Check if venv exists (indicates init script was run)
-    if os.path.exists(venv_path) and not os.path.exists(marker_file):
-        print("⏳ Dependencies are being installed in the background (started by init script)...")
-        print("   Waiting for installation to complete...")
-        
-        # Wait up to 2 minutes for background installation
-        max_wait = 120  # 2 minutes
-        wait_interval = 2
-        elapsed = 0
-        
-        while elapsed < max_wait:
-            if os.path.exists(marker_file):
-                print("✅ Background installation completed!")
-                break
+    # Check if marker file doesn't exist yet (background install may be running)
+    if not os.path.exists(marker_file):
+        # Check if .aidefense directory exists (indicates init script was run)
+        aidefense_dir = os.path.join(os.path.dirname(__file__), '.aidefense')
+        if os.path.exists(aidefense_dir):
+            print("⏳ Dependencies are being installed in the background (started by init script)...")
+            print("   Waiting for installation to complete...")
             
-            # Show progress dots
-            sys.stdout.write('.')
-            sys.stdout.flush()
-            time.sleep(wait_interval)
-            elapsed += wait_interval
-        
-        print("")
-        
-        if not os.path.exists(marker_file):
-            print("⚠️  Background installation taking longer than expected.")
-            print("   Proceeding with manual installation...")
+            # Wait up to 2 minutes for background installation
+            max_wait = 120  # 2 minutes
+            wait_interval = 2
+            elapsed = 0
+            
+            while elapsed < max_wait:
+                if os.path.exists(marker_file):
+                    print("✅ Background installation completed!")
+                    break
+                
+                # Show progress dots
+                sys.stdout.write('.')
+                sys.stdout.flush()
+                time.sleep(wait_interval)
+                elapsed += wait_interval
+            
+            print("")
+            
+            if not os.path.exists(marker_file):
+                print("⚠️  Background installation taking longer than expected.")
+                print("   Proceeding with manual installation...")
     
     # If no background installation or it timed out, do manual install
     if not os.path.exists(marker_file):
