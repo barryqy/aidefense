@@ -200,6 +200,29 @@ class AIDefenseClient:
         
         raise ValueError("AI Defense API key not found. Run '0-init-lab.sh' first to set up credentials.")
     
+    def inspect_prompt(self, user_input: str) -> Dict[str, Any]:
+        """Inspect only the user's prompt for PII/sensitive data"""
+        headers = {
+            "X-Cisco-AI-Defense-API-Key": self.api_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        payload = {
+            "messages": [
+                {"role": "user", "content": user_input}
+            ],
+            "metadata": {},
+            "config": {}
+        }
+        
+        try:
+            response = requests.post(self.api_url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            return {"error": f"AI Defense inspection failed: {str(e)}"}
+    
     def inspect_conversation(self, user_input: str, ai_response: str) -> Dict[str, Any]:
         """Inspect user input and AI response for safety"""
         headers = {
@@ -375,8 +398,9 @@ class BarryBotAgent:
             # In WARN mode, check the prompt first before processing
             if self.use_ai_defense and self.ai_defense and self.security_action == 'warn' and not skip_prompt_check:
                 # Check if the user's prompt contains PII or sensitive data
-                prompt_check = self.ai_defense.inspect_conversation(message, "")
+                prompt_check = self.ai_defense.inspect_prompt(message)
                 prompt_is_safe = prompt_check.get("is_safe", True) if "error" not in prompt_check else True
+                prompt_classifications = prompt_check.get('classifications', [])
                 
                 if not prompt_is_safe:
                     # Prompt contains PII - return warning without processing
@@ -385,8 +409,8 @@ class BarryBotAgent:
                         "ai_defense_enabled": True,
                         "is_safe": False,
                         "prompt_warning": True,
-                        "safety_info": f"⚠️  Your prompt contains PII: {prompt_check.get('classifications', [])}",
-                        "classifications": prompt_check.get('classifications', []),
+                        "safety_info": f"Your prompt contains PII or sensitive data",
+                        "classifications": prompt_classifications,
                         "security_action": 'warn'
                     }
             
@@ -478,14 +502,17 @@ class BarryBotAgent:
                 
                 # Check if prompt warning (WARN mode with PII in prompt)
                 if result.get('prompt_warning'):
-                    print(f"\n⚠️  {result['safety_info']}")
-                    print("    Do you want to continue? (yes/no): ", end='')
+                    classifications_str = ', '.join(result.get('classifications', []))
+                    print(f"\n⚠️  WARNING: {result['safety_info']}")
+                    print(f"    Detected: {classifications_str}")
+                    print("    Are you sure you want to send this prompt? (yes/no): ", end='')
                     confirmation = input().strip().lower()
                     
                     if confirmation in ['yes', 'y']:
                         # User confirmed, process with skip_prompt_check
+                        print("\n    User confirmed. Processing request...\n")
                         result = self.chat(user_input, skip_prompt_check=True)
-                        print(f"\nBarryBot: {result['response']}")
+                        print(f"BarryBot: {result['response']}")
                     else:
                         print("\n⛔ Request cancelled for security reasons.")
                         continue
@@ -587,13 +614,23 @@ Contact: bayuan@cisco.com for questions and issues
         
         # Check if prompt warning
         if result.get('prompt_warning'):
-            print(f"⚠️  {result['safety_info']}")
-            print("    Your prompt contains PII. In interactive mode, you would be asked to confirm.")
-            print("    For this test, showing what would happen if you proceed...\n")
-            # Auto-confirm for single prompt mode
-            result = agent.chat(args.prompt, skip_prompt_check=True)
-        
-        print(f"BarryBot: {result['response']}")
+            classifications_str = ', '.join(result.get('classifications', []))
+            print(f"⚠️  WARNING: {result['safety_info']}")
+            print(f"    Detected: {classifications_str}")
+            print(f"    Are you sure you want to send this prompt? (yes/no): ", end='')
+            
+            # In single prompt mode, get user input
+            confirmation = input().strip().lower()
+            
+            if confirmation in ['yes', 'y']:
+                print("\n    User confirmed. Processing request...\n")
+                # Auto-confirm for single prompt mode
+                result = agent.chat(args.prompt, skip_prompt_check=True)
+                print(f"BarryBot: {result['response']}")
+            else:
+                print("\n⛔ Request cancelled for security reasons.")
+        else:
+            print(f"BarryBot: {result['response']}")
         
         # Display security info
         if result['ai_defense_enabled'] and not result['is_safe']:
