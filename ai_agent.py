@@ -97,14 +97,15 @@ except ImportError:
                 print("⚠️  Background installation taking longer than expected.")
                 print("   Proceeding with manual installation...")
     
-    # If no background installation or it timed out, do manual install
-    if not os.path.exists(marker_file):
-        print("❌ LangChain not installed.")
-        print("For Docker containers, please install via:")
-        print("   pip3 install --ignore-installed langchain langchain-community")
-        print("Or add to your Dockerfile:")
-        print("   RUN pip3 install --ignore-installed langchain langchain-community")
-        print("Attempting automatic installation with Docker-compatible flags...")
+    # Even if marker exists, verify packages are actually importable
+    # Try importing again in case background install just completed
+    try:
+        from langchain.memory import ConversationBufferWindowMemory
+        from langchain.callbacks.base import BaseCallbackHandler
+    except ImportError:
+        # Packages still not available, do manual install
+        print("❌ LangChain not installed or not in Python path.")
+        print("Attempting automatic installation...")
         
         # Docker-compatible installation with ignore-installed flag
         exit_code = os.system("pip3 install --ignore-installed langchain langchain-community")
@@ -114,10 +115,10 @@ except ImportError:
             sys.exit(1)
         
         print("✅ Installation completed. Continuing with script execution...")
-    
-    # Import the newly installed modules (either from background or manual install)
-    from langchain.memory import ConversationBufferWindowMemory
-    from langchain.callbacks.base import BaseCallbackHandler
+        
+        # Import the newly installed modules
+        from langchain.memory import ConversationBufferWindowMemory
+        from langchain.callbacks.base import BaseCallbackHandler
 
 # Try importing Mistral (via Ollama or API)
 try:
