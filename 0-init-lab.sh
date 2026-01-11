@@ -118,8 +118,9 @@ echo "🔧 Installing AI Agent dependencies in background..."
     touch .aidefense/.langchain_ready 2>/dev/null
 ) &
 
-# Store the background process ID
+# Store the background process ID and disown to prevent completion message
 INSTALL_PID=$!
+disown
 echo "✓ Dependency installation started (PID: $INSTALL_PID)"
 echo ""
 
