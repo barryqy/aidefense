@@ -109,18 +109,26 @@ echo ""
 
 # Install LangChain dependencies in the background for Module 3
 echo "🔧 Installing AI Agent dependencies in background..."
+
+# Disable job control messages
+set +m
+
 (
-    # Install to user site-packages (no venv needed)
-    python3 -m pip install --user --quiet langchain langchain-community langchain-mistralai >/dev/null 2>&1
+    # Install to system Python (Docker-compatible)
+    python3 -m pip install --quiet --break-system-packages langchain langchain-community langchain-mistralai >/dev/null 2>&1
     
     # Create a completion marker
     mkdir -p .aidefense
     touch .aidefense/.langchain_ready 2>/dev/null
-) &
+) >/dev/null 2>&1 &
 
 # Store the background process ID and disown to prevent completion message
 INSTALL_PID=$!
 disown
+
+# Re-enable job control messages
+set -m
+
 echo "✓ Dependency installation started (PID: $INSTALL_PID)"
 echo ""
 
