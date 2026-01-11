@@ -227,9 +227,10 @@ class AIDefenseClient:
 class BarryBotAgent:
     """Simple AI Agent using LangChain with Mistral"""
     
-    def __init__(self, use_mistral: bool = True, use_ai_defense: bool = True):
+    def __init__(self, use_mistral: bool = True, use_ai_defense: bool = True, security_action: str = 'block'):
         self.use_mistral = use_mistral
         self.use_ai_defense = use_ai_defense
+        self.security_action = security_action  # 'block' (default), 'warn', or 'log'
         self.setup_database()
         self.setup_agent()
     
@@ -368,9 +369,27 @@ class BarryBotAgent:
         except Exception as e:
             return f"Error querying database: {str(e)}"
     
-    def chat(self, message: str) -> Dict[str, Any]:
+    def chat(self, message: str, skip_prompt_check: bool = False) -> Dict[str, Any]:
         """Process chat message with optional AI Defense"""
         try:
+            # In WARN mode, check the prompt first before processing
+            if self.use_ai_defense and self.ai_defense and self.security_action == 'warn' and not skip_prompt_check:
+                # Check if the user's prompt contains PII or sensitive data
+                prompt_check = self.ai_defense.inspect_conversation(message, "")
+                prompt_is_safe = prompt_check.get("is_safe", True) if "error" not in prompt_check else True
+                
+                if not prompt_is_safe:
+                    # Prompt contains PII - return warning without processing
+                    return {
+                        "response": None,
+                        "ai_defense_enabled": True,
+                        "is_safe": False,
+                        "prompt_warning": True,
+                        "safety_info": f"⚠️  Your prompt contains PII: {prompt_check.get('classifications', [])}",
+                        "classifications": prompt_check.get('classifications', []),
+                        "security_action": 'warn'
+                    }
+            
             # Query database for relevant information
             database_context = self.query_database(message)
             
@@ -385,16 +404,28 @@ class BarryBotAgent:
             if self.use_ai_defense and self.ai_defense:
                 safety_result = self.ai_defense.inspect_conversation(message, response)
                 is_safe = safety_result.get("is_safe", True) if "error" not in safety_result else True
+                classifications = safety_result.get('classifications', [])
                 
-                # TODO: Add blocking logic here (see Lab 3 - Programming Your Application for Security)
-                # HINT: Check if response is unsafe and replace it with a blocked message
-                # Example: if not is_safe: response = "I cannot provide this information..."
+                # Apply security action based on mode
+                original_response = response
+                if not is_safe:
+                    if self.security_action == 'block':
+                        # BLOCK: Replace unsafe response completely
+                        response = "🚫 I cannot provide this information for security reasons."
+                    elif self.security_action == 'warn':
+                        # WARN: Keep response but add warning
+                        response = f"⚠️  Security Warning: This response may contain sensitive information.\n\n{response}"
+                    # LOG mode: Keep original response, just log it
+                
+                safety_info = "Safe" if is_safe else f"⚠️  Safety concern: {classifications}"
                 
                 return {
                     "response": response,
                     "ai_defense_enabled": True,
                     "is_safe": is_safe,
-                    "safety_info": "Safe" if is_safe else f"⚠️  Safety concern: {safety_result.get('classifications', 'Unknown')}"
+                    "safety_info": safety_info,
+                    "classifications": classifications,
+                    "security_action": self.security_action if not is_safe else None
                 }
             else:
                 return {
@@ -445,8 +476,22 @@ class BarryBotAgent:
                 # Process message
                 result = self.chat(user_input)
                 
-                # Display response
-                print(f"\nBarryBot: {result['response']}")
+                # Check if prompt warning (WARN mode with PII in prompt)
+                if result.get('prompt_warning'):
+                    print(f"\n⚠️  {result['safety_info']}")
+                    print("    Do you want to continue? (yes/no): ", end='')
+                    confirmation = input().strip().lower()
+                    
+                    if confirmation in ['yes', 'y']:
+                        # User confirmed, process with skip_prompt_check
+                        result = self.chat(user_input, skip_prompt_check=True)
+                        print(f"\nBarryBot: {result['response']}")
+                    else:
+                        print("\n⛔ Request cancelled for security reasons.")
+                        continue
+                else:
+                    # Display response
+                    print(f"\nBarryBot: {result['response']}")
                 
                 # Display safety info only if AI Defense is enabled
                 if result['ai_defense_enabled']:
@@ -454,6 +499,13 @@ class BarryBotAgent:
                         print("🛡️  AI Defense: Response verified safe")
                     else:
                         print(f"🛡️  AI Defense: {result['safety_info']}")
+                        if result.get('security_action'):
+                            action_msgs = {
+                                'block': '🚫 Response BLOCKED by security policy',
+                                'warn': '⚠️  Response ALLOWED with warning',
+                                'log': '📝 Response LOGGED for audit'
+                            }
+                            print(f"    Action: {action_msgs.get(result['security_action'], 'Unknown')}")
                 
             except KeyboardInterrupt:
                 print("\n\n👋 Goodbye!")
@@ -470,9 +522,16 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python3 ai_agent.py                          # Run with AI Defense enabled
-  python3 ai_agent.py --no-ai-defense         # Run without AI Defense
-  python3 ai_agent.py --help                  # Show this help message
+  python3 ai_agent.py                                  # Run with AI Defense (block mode - default)
+  python3 ai_agent.py --security-action warn           # Warn but allow responses
+  python3 ai_agent.py --security-action log            # Log only (allow all)
+  python3 ai_agent.py --no-ai-defense                  # Disable AI Defense completely
+  python3 ai_agent.py --prompt "what is barry's ssn?"  # Test single prompt
+
+Security Action Modes:
+  block: Block unsafe responses completely (default, strictest)
+  warn:  Allow responses but add security warnings
+  log:   Allow all responses, log security concerns only
 
 Contact: bayuan@cisco.com for questions and issues
         """
@@ -484,16 +543,74 @@ Contact: bayuan@cisco.com for questions and issues
         help='Disable AI Defense safety analysis (faster responses)'
     )
     
+    parser.add_argument(
+        '--security-action',
+        type=str,
+        choices=['block', 'warn', 'log'],
+        default='block',
+        help='Security action mode: block (default, strictest), warn (add warnings), log (allow all)'
+    )
+    
+    parser.add_argument(
+        '--prompt',
+        type=str,
+        help='Single prompt to test (non-interactive mode)'
+    )
+    
     args = parser.parse_args()
     
     print("🚀 Starting BarryBot AI Agent...")
     
-    # Initialize agent with AI Defense setting
+    # Initialize agent with AI Defense setting and security action
     use_ai_defense = not args.no_ai_defense
-    agent = BarryBotAgent(use_mistral=True, use_ai_defense=use_ai_defense)
+    agent = BarryBotAgent(
+        use_mistral=True, 
+        use_ai_defense=use_ai_defense,
+        security_action=args.security_action
+    )
     
-    # Always run interactive mode
-    agent.run_interactive()
+    # Check if single prompt mode or interactive mode
+    if args.prompt:
+        # Single prompt mode
+        print("=" * 60)
+        print("BARRYBOT - SINGLE PROMPT TEST")
+        print("=" * 60)
+        if use_ai_defense:
+            print(f"✓ AI Defense: ENABLED (Security Action: {args.security_action})")
+        else:
+            print("⚠️  AI Defense: DISABLED")
+        print("-" * 60)
+        
+        # Process the single prompt
+        print(f"\nYou: {args.prompt}\n")
+        result = agent.chat(args.prompt)
+        
+        # Check if prompt warning
+        if result.get('prompt_warning'):
+            print(f"⚠️  {result['safety_info']}")
+            print("    Your prompt contains PII. In interactive mode, you would be asked to confirm.")
+            print("    For this test, showing what would happen if you proceed...\n")
+            # Auto-confirm for single prompt mode
+            result = agent.chat(args.prompt, skip_prompt_check=True)
+        
+        print(f"BarryBot: {result['response']}")
+        
+        # Display security info
+        if result['ai_defense_enabled'] and not result['is_safe']:
+            print(f"\n🛡️  AI Defense: {result['safety_info']}")
+            if result.get('security_action'):
+                action_msgs = {
+                    'block': '🚫 Response BLOCKED by security policy',
+                    'warn': '⚠️  Response ALLOWED with warning',
+                    'log': '📝 Response LOGGED for audit'
+                }
+                print(f"    Action: {action_msgs.get(result['security_action'], 'Unknown')}")
+        print()
+    else:
+        # Interactive mode
+        if use_ai_defense:
+            print(f"✓ AI Defense enabled with security action: {args.security_action}")
+        agent.run_interactive()
 
 if __name__ == "__main__":
     main()
