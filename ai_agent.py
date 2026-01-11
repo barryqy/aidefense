@@ -61,22 +61,59 @@ try:
     from langchain.memory import ConversationBufferWindowMemory
     from langchain.callbacks.base import BaseCallbackHandler
 except ImportError:
-    print("❌ LangChain not installed.")
-    print("For Docker containers, please install via:")
-    print("   pip3 install --ignore-installed langchain langchain-community")
-    print("Or add to your Dockerfile:")
-    print("   RUN pip3 install --ignore-installed langchain langchain-community")
-    print("Attempting automatic installation with Docker-compatible flags...")
+    import time
+    import subprocess
     
-    # Docker-compatible installation with ignore-installed flag
-    exit_code = os.system("pip3 install --ignore-installed langchain langchain-community")
-    if exit_code != 0:
-        print("❌ Auto-installation failed. Please install manually:")
-        print("   pip3 install --ignore-installed --force-reinstall langchain langchain-community")
-        sys.exit(1)
+    # Check if background installation from init script is running
+    venv_path = os.path.join(os.path.dirname(__file__), 'venv')
+    marker_file = os.path.join(os.path.dirname(__file__), '.aidefense', '.langchain_ready')
     
-    print("✅ Installation completed. Continuing with script execution...")
-    # Import the newly installed modules
+    # Check if venv exists (indicates init script was run)
+    if os.path.exists(venv_path) and not os.path.exists(marker_file):
+        print("⏳ Dependencies are being installed in the background (started by init script)...")
+        print("   Waiting for installation to complete...")
+        
+        # Wait up to 2 minutes for background installation
+        max_wait = 120  # 2 minutes
+        wait_interval = 2
+        elapsed = 0
+        
+        while elapsed < max_wait:
+            if os.path.exists(marker_file):
+                print("✅ Background installation completed!")
+                break
+            
+            # Show progress dots
+            sys.stdout.write('.')
+            sys.stdout.flush()
+            time.sleep(wait_interval)
+            elapsed += wait_interval
+        
+        print("")
+        
+        if not os.path.exists(marker_file):
+            print("⚠️  Background installation taking longer than expected.")
+            print("   Proceeding with manual installation...")
+    
+    # If no background installation or it timed out, do manual install
+    if not os.path.exists(marker_file):
+        print("❌ LangChain not installed.")
+        print("For Docker containers, please install via:")
+        print("   pip3 install --ignore-installed langchain langchain-community")
+        print("Or add to your Dockerfile:")
+        print("   RUN pip3 install --ignore-installed langchain langchain-community")
+        print("Attempting automatic installation with Docker-compatible flags...")
+        
+        # Docker-compatible installation with ignore-installed flag
+        exit_code = os.system("pip3 install --ignore-installed langchain langchain-community")
+        if exit_code != 0:
+            print("❌ Auto-installation failed. Please install manually:")
+            print("   pip3 install --ignore-installed --force-reinstall langchain langchain-community")
+            sys.exit(1)
+        
+        print("✅ Installation completed. Continuing with script execution...")
+    
+    # Import the newly installed modules (either from background or manual install)
     from langchain.memory import ConversationBufferWindowMemory
     from langchain.callbacks.base import BaseCallbackHandler
 
