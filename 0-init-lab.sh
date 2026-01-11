@@ -107,11 +107,34 @@ fi
 echo "✓ Environment variables configured"
 echo ""
 
+# Install LangChain dependencies in the background for Module 3
+echo "🔧 Installing AI Agent dependencies in background..."
+(
+    # Create virtual environment if it doesn't exist
+    if [ ! -d "venv" ]; then
+        python3 -m venv venv >/dev/null 2>&1
+    fi
+    
+    # Install LangChain and dependencies silently
+    ./venv/bin/pip install --quiet langchain langchain-community langchain-mistralai >/dev/null 2>&1
+    
+    # Create a completion marker
+    touch .aidefense/.langchain_ready 2>/dev/null
+) &
+
+# Store the background process ID
+INSTALL_PID=$!
+echo "✓ Dependency installation started (PID: $INSTALL_PID)"
+echo ""
+
 echo "════════════════════════════════════════════════════════════"
 echo "✅ Lab initialization complete!"
 echo "════════════════════════════════════════════════════════════"
 echo ""
 echo "💡 You can now run the AI Defense lab scripts following the lab guide"
+echo ""
+echo "📦 Note: AI Agent dependencies are installing in the background."
+echo "   By the time you reach Module 3, they'll be ready!"
 
 # Clean up sensitive variables from memory
 cleanup_credentials
