@@ -33,9 +33,6 @@ if [ "$PASSWORD_LENGTH" -gt 20 ]; then
     exit 1
 fi
 
-# Sanitize password - remove any control characters that could cause issues
-LAB_PASSWORD=$(echo "$LAB_PASSWORD" | tr -cd '[:print:]')
-
 export LAB_PASSWORD
 
 # Source shared credentials helper
