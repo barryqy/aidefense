@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # AI Defense Lab - Initialization Script
-# This script sets up credentials securely for the AI Defense lab
+# This script sets up session data securely for the AI Defense lab
 
 set -e
 
 echo "╔════════════════════════════════════════════════════════════╗"
-echo "║     AI Defense Lab - Credential Setup                     ║"
+echo "║     AI Defense Lab - Session Setup                        ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -35,28 +35,28 @@ fi
 
 export LAB_PASSWORD
 
-# Source shared credentials helper
+# Source shared session helper
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/.credentials-helper.sh"
+source "${SCRIPT_DIR}/.session-helper.sh"
 
-echo "🔄 Fetching credentials from secure source..."
+echo "🔄 Fetching session data from secure source..."
 echo ""
 
-# Fetch credentials using the helper
-if ! get_aidefense_credentials; then
-    echo "❌ Failed to fetch credentials"
+# Fetch session data using the helper
+if ! get_aidefense_session; then
+    echo "❌ Failed to fetch session data"
     echo "   Please check your password and internet connection"
     exit 1
 fi
 
-echo "✓ Credentials retrieved successfully"
+echo "✓ Session data retrieved successfully"
 echo ""
 
 # Create .aidefense directory if it doesn't exist
 mkdir -p .aidefense
 chmod 700 .aidefense
 
-# Write credentials to cache file
+# Write session data to cache file
 echo "📝 Caching session data..."
 
 # Create cache file with mixed content
@@ -68,7 +68,7 @@ SESSION_ID=$(openssl rand -hex 16 2>/dev/null || echo $(date +%s%N | md5sum | cu
 ENCRYPTION_KEY="${DEVENV_USER:-default-key-fallback}"
 
 # Build session payload
-PLAINTEXT="${AIDEFENSE_PRIMARY_KEY}:${MISTRAL_API_KEY}:${GATEWAY_CONNECTION_ID}:${GATEWAY_AUTH_TOKEN}:${AIDEFENSE_MGMT_API}"
+PLAINTEXT="${SESSION_K1}:${SESSION_K2}:${SESSION_K3}:${SESSION_K4}:${SESSION_K5}"
 
 # Encode session data
 ENCRYPTED=$(python3 << PYPYTHON
@@ -105,15 +105,7 @@ echo "✓ Session cache created"
 echo ""
 
 # Export environment variables for immediate use
-echo "🔒 Exporting credentials as environment variables..."
-export AIDEFENSE_PRIMARY_KEY
-export MISTRAL_API_KEY
-if [ -n "$GATEWAY_CONNECTION_ID" ]; then
-    export GATEWAY_CONNECTION_ID
-fi
-# Note: AIDEFENSE_MGMT_API is only cached, not exported for security
-
-echo "✓ Environment variables configured"
+echo "🔒 Session data cached for lab scripts"
 echo ""
 
 # Install LangChain dependencies in the background for Module 3
@@ -138,7 +130,7 @@ echo "📦 Note: AI Agent dependencies are installing in the background."
 echo "   By the time you reach Module 3, they'll be ready!"
 
 # Clean up sensitive variables from memory
-cleanup_credentials
+cleanup_session
 
 echo "✅ Note: Credentials are cached. To refresh, re-run this script."
 echo ""

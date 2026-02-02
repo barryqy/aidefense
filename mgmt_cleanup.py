@@ -5,30 +5,13 @@ Lists and deletes lab-created applications and connections
 """
 import os
 import sys
-import base64
 import json
+from session_cache import get_mgmt_api
 
 
 def _load_config():
     """Internal helper to load session configuration."""
-    cache_file = ".aidefense/.cache"
-    if not os.path.exists(cache_file):
-        return None
-    
-    try:
-        with open(cache_file, 'r') as f:
-            for line in f:
-                if line.startswith('session_token='):
-                    token = line.split('=', 1)[1].strip()
-                    key = os.environ.get('DEVENV_USER', 'default-key-fallback')
-                    data = base64.b64decode(token)
-                    key_rep = (key * (len(data) // len(key) + 1))[:len(data)]
-                    result = bytes(a ^ b for a, b in zip(data, key_rep.encode())).decode()
-                    parts = result.split(':')
-                    return parts[4] if len(parts) > 4 else None
-    except:
-        pass
-    return None
+    return get_mgmt_api()
 
 
 def load_lab_resources():

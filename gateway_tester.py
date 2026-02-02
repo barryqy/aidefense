@@ -18,6 +18,11 @@ import sys
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 import argparse
+from session_cache import (
+    get_gateway_connection_id,
+    get_gateway_auth_token,
+    get_mistral_key,
+)
 
 # Disable urllib3 warnings directly
 import urllib3
@@ -56,86 +61,23 @@ class AIDefenseGatewayTester:
     
     def _load_connection_id(self):
         """Load gateway connection ID from cache"""
-        import base64
-        
-        # Try environment variable first
-        conn_id = os.environ.get('GATEWAY_CONNECTION_ID')
+        conn_id = get_gateway_connection_id()
         if conn_id:
             return conn_id
-        
-        # Load from session cache
-        try:
-            cache_file = ".aidefense/.cache"
-            env_key = os.environ.get('DEVENV_USER', 'default-key-fallback')
-            
-            if os.path.exists(cache_file):
-                with open(cache_file, 'r') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line.startswith('session_token='):
-                            encoded = line.split('=', 1)[1].strip()
-                            enc_bytes = base64.b64decode(encoded)
-                            
-                            # Decode session data
-                            key_rep = (env_key * (len(enc_bytes) // len(env_key) + 1))[:len(enc_bytes)]
-                            dec_bytes = bytes(a ^ b for a, b in zip(enc_bytes, key_rep.encode()))
-                            plaintext = dec_bytes.decode('utf-8')
-                            
-                            parts = plaintext.split(':')
-                            if len(parts) > 2:
-                                conn_id = parts[2]
-                                if conn_id and conn_id != "none":
-                                    return conn_id
-        except Exception:
-            pass
-        
-        raise ValueError("Gateway connection ID not found. Run '0-init-lab.sh' first to set up credentials.")
+        raise ValueError("Gateway connection ID not found. Run '0-init-lab.sh' first to initialize the session.")
     
     def _load_auth_token(self):
         """Load gateway auth token from cache"""
-        import base64
-        
-        # Try environment variable first
-        token = os.environ.get('GATEWAY_AUTH_TOKEN')
+        token = get_gateway_auth_token()
         if token:
             return token
-        
-        # Load from session cache
-        try:
-            cache_file = ".aidefense/.cache"
-            env_key = os.environ.get('DEVENV_USER', 'default-key-fallback')
-            
-            if os.path.exists(cache_file):
-                with open(cache_file, 'r') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line.startswith('session_token='):
-                            encoded = line.split('=', 1)[1].strip()
-                            enc_bytes = base64.b64decode(encoded)
-                            
-                            # Decode session data
-                            key_rep = (env_key * (len(enc_bytes) // len(env_key) + 1))[:len(enc_bytes)]
-                            dec_bytes = bytes(a ^ b for a, b in zip(enc_bytes, key_rep.encode()))
-                            plaintext = dec_bytes.decode('utf-8')
-                            
-                            parts = plaintext.split(':')
-                            
-                            # Try to get gateway auth token from part 3
-                            if len(parts) > 3:
-                                token = parts[3]
-                                if token and token != "none":
-                                    return token
-                            
-                            # Fallback: Use Mistral API key (part 1) as gateway auth token
-                            # The gateway uses the Mistral API key for authentication
-                            if len(parts) > 1:
-                                mistral_key = parts[1]
-                                if mistral_key and mistral_key != "none":
-                                    return mistral_key
-        except Exception:
-            pass
-        
-        raise ValueError("Gateway auth token not found. Run '0-init-lab.sh' first to set up credentials.")
+
+        # Fallback: Use Mistral API key for gateway auth
+        mistral_key = get_mistral_key()
+        if mistral_key:
+            return mistral_key
+
+        raise ValueError("Gateway auth token not found. Run '0-init-lab.sh' first to initialize the session.")
     
     def _get_test_scenarios(self):
         """Get test scenarios for automated testing"""

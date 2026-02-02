@@ -15,8 +15,7 @@ import sys
 import json
 import time
 import argparse
-import urllib.request
-import urllib.error
+from session_cache import get_primary_key
 import asyncio
 import threading
 import re
@@ -56,73 +55,21 @@ class StreamingMetrics:
 
 class AIDefenseLab:
     """AI Defense Lab Testing Tool"""
-    
-    def _fetch_api_key_from_url(self, url: str, timeout: int = 10) -> Optional[str]:
-        """
-        Fetch API key from a given URL with error handling
-        
-        Args:
-            url: The URL to fetch the API key from
-            timeout: Request timeout in seconds
-            
-        Returns:
-            The fetched API key as string or None if failed
-        """
-        try:
-            with urllib.request.urlopen(url, timeout=timeout) as response:
-                if response.getcode() == 200:
-                    content = response.read().decode('utf-8').strip()
-                    return content
-                else:
-                    return None
-        except urllib.error.URLError as e:
-            return None
-        except Exception as e:
-            return None
 
     def _load_api_keys(self) -> dict:
         """
-        Load API keys with caching via environment variables.
-        First checks env vars, then fetches from pastebin if needed.
+        Load API keys from the local cache.
         
         Returns:
             Dictionary containing the API keys
         """
         api_keys = {}
         
-        # Environment variable names for caching
-        env_vars = {
-            'primary': 'AIDEFENSE_PRIMARY_KEY',
-            'bearer': 'AIDEFENSE_BEARER_KEY'
-        }
-        
-        # URLs for the API keys
-        key_urls = {
-            'primary': 'https://pastebin.com/raw/8DUknsGS',
-            'bearer': 'https://pastebin.com/raw/sc4i5RDq'
-        }
-        
-        # No fallback keys - students must run 0-init-lab.sh
-        
-        for key_type in ['primary', 'bearer']:
-            env_var = env_vars[key_type]
-            
-            # First check if key exists in environment variable
-            cached_key = os.environ.get(env_var)
-            if cached_key:
-                api_keys[key_type] = cached_key
-                continue
-            
-            # If not cached, fetch from pastebin
-            fetched_key = self._fetch_api_key_from_url(key_urls[key_type])
-            
-            if fetched_key:
-                api_keys[key_type] = fetched_key
-                # Cache in environment variable for next time
-                os.environ[env_var] = fetched_key
-            else:
-                # No key available - user must run init script
-                raise ValueError(f"{key_type} API key not found. Run '0-init-lab.sh' first to set up credentials.")
+        primary_key = get_primary_key()
+        if primary_key:
+            api_keys["primary"] = primary_key
+        else:
+            raise ValueError("primary API key not found. Run '0-init-lab.sh' first to initialize the session.")
         
         return api_keys
 
@@ -156,7 +103,7 @@ class AIDefenseLab:
                 pattern=r"(?i)(password|api.?key|token|secret|credential)",
                 category="credential_theft",
                 severity="critical",
-                description="Attempt to harvest credentials or sensitive information"
+                description="Attempt to harvest secrets or sensitive information"
             ),
             ThreatRule(
                 name="SYSTEM_MANIPULATION",

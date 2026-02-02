@@ -10,51 +10,7 @@ import requests
 import urllib.request
 from typing import List, Dict, Any
 
-# Helper function to load credentials from cache
-def _load_from_cache(field_name):
-    """Load session data from cache file"""
-    try:
-        import base64
-        cache_file = ".aidefense/.cache"
-        
-        # Map field names to position in session data
-        field_positions = {
-            'session_token': 0,
-            'auth_hash': 1,
-            'request_id': 2,
-            'bearer_token': 3
-        }
-        
-        position = field_positions.get(field_name)
-        if position is None:
-            return None
-        
-        # Get environment context
-        env_key = os.environ.get('DEVENV_USER', 'default-key-fallback')
-        
-        if os.path.exists(cache_file):
-            with open(cache_file, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith('session_token='):
-                        # Extract session data
-                        encoded = line.split('=', 1)[1].strip()
-                        enc_bytes = base64.b64decode(encoded)
-                        
-                        # Decode session data
-                        key_rep = (env_key * (len(enc_bytes) // len(env_key) + 1))[:len(enc_bytes)]
-                        dec_bytes = bytes(a ^ b for a, b in zip(enc_bytes, key_rep.encode()))
-                        plaintext = dec_bytes.decode('utf-8')
-                        
-                        # Parse session fields
-                        parts = plaintext.split(':')
-                        if position < len(parts):
-                            credential = parts[position]
-                            if credential and credential != "none":
-                                return credential
-    except Exception:
-        pass
-    return None
+from session_cache import get_primary_key, get_mistral_key
 
 # Try importing LangChain components
 try:
@@ -136,18 +92,11 @@ class AIDefenseCallback(BaseCallbackHandler):
     
     def _load_api_key(self) -> str:
         """Load API key from environment or cached file"""
-        # Check environment variable first
-        cached_key = os.environ.get('AIDEFENSE_PRIMARY_KEY')
-        if cached_key:
-            return cached_key
-        
-        # Try to load from cache file
-        key = _load_from_cache('session_token')
+        key = get_primary_key()
         if key:
-            os.environ['AIDEFENSE_PRIMARY_KEY'] = key
             return key
         
-        raise ValueError("AI Defense API key not found. Run '0-init-lab.sh' first to set up credentials.")
+        raise ValueError("AI Defense API key not found. Run '0-init-lab.sh' first to initialize the session.")
     
     def on_llm_end(self, response, **kwargs):
         """Inspect response with AI Defense"""
@@ -165,21 +114,11 @@ class SimpleMistralLLM:
     
     def _load_mistral_key(self) -> str:
         """Load Mistral API key from environment or cached file"""
-        # Environment variable name for caching
-        env_var = 'MISTRAL_API_KEY'
-        
-        # Check environment variable first
-        cached_key = os.environ.get(env_var)
-        if cached_key:
-            return cached_key
-        
-        # Try to load from cache file
-        key = _load_from_cache('auth_hash')
+        key = get_mistral_key()
         if key:
-            os.environ[env_var] = key
             return key
         
-        raise ValueError("Mistral API key not found. Run '0-init-lab.sh' first to set up credentials.")
+        raise ValueError("Mistral API key not found. Run '0-init-lab.sh' first to initialize the session.")
     
     def __call__(self, prompt: str, database_context: str = "", **kwargs) -> str:
         """Call Mistral API with database context"""
@@ -227,18 +166,11 @@ class AIDefenseClient:
     
     def _load_api_key(self) -> str:
         """Load API key from environment or cached file"""
-        # Check environment variable first
-        cached_key = os.environ.get('AIDEFENSE_PRIMARY_KEY')
-        if cached_key:
-            return cached_key
-        
-        # Try to load from cache file
-        key = _load_from_cache('session_token')
+        key = get_primary_key()
         if key:
-            os.environ['AIDEFENSE_PRIMARY_KEY'] = key
             return key
         
-        raise ValueError("AI Defense API key not found. Run '0-init-lab.sh' first to set up credentials.")
+        raise ValueError("AI Defense API key not found. Run '0-init-lab.sh' first to initialize the session.")
     
     def inspect_prompt(self, user_input: str) -> Dict[str, Any]:
         """Inspect only the user's prompt for PII/sensitive data"""
