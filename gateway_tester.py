@@ -148,7 +148,7 @@ class AIDefenseGatewayTester:
         
         payload = {
             "stream": False,
-            "model": "mistral-large-latest",
+            "model": "mistral-small-latest",
             "messages": [{"role": "user", "content": prompt}]
         }
         
@@ -340,7 +340,7 @@ class AIDefenseGatewayTester:
             if model:
                 print(f"🤖 Model: {model}")
             else:
-                print(f"🤖 Model: mistral-large-latest")
+                print(f"🤖 Model: mistral-small-latest")
             
             usage = result.get('usage', {})
             if usage:
