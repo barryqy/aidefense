@@ -10,28 +10,10 @@ echo "║     AI Defense Lab - Session Setup                         ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
 
-# Prompt for lab password (only once!)
-echo "════════════════════════════════════════════════════════════"
-echo "🔐 🔐 🔐  PASSWORD REQUIRED  🔐 🔐 🔐"
-echo "════════════════════════════════════════════════════════════"
+# TEMPORARY: Auto-set password for live event (revert after event)
+LAB_PASSWORD="585877"
+echo "🔐 Using pre-configured event password"
 echo ""
-read -sp "👉 Enter lab password: " LAB_PASSWORD
-echo ""
-echo ""
-
-# Validate password
-if [ -z "$LAB_PASSWORD" ]; then
-    echo "❌ Password cannot be empty"
-    exit 1
-fi
-
-# Check password length (max 20 characters to prevent memory issues)
-PASSWORD_LENGTH=${#LAB_PASSWORD}
-if [ "$PASSWORD_LENGTH" -gt 20 ]; then
-    echo "❌ Password too long (max 20 characters)"
-    echo "   If you pasted something by mistake, please try again"
-    exit 1
-fi
 
 export LAB_PASSWORD
 
@@ -115,7 +97,7 @@ echo "🔧 Installing AI Agent dependencies in background..."
 mkdir -p .aidefense
 
 # Run in true background with nohup
-nohup sh -c 'pip3 install --root-user-action=ignore --disable-pip-version-check --ignore-installed langchain langchain-community > /dev/null 2>&1 && touch .aidefense/.langchain_ready' > /dev/null 2>&1 &
+nohup sh -c 'pip3 install --disable-pip-version-check --ignore-installed langchain langchain-community > /dev/null 2>&1 && touch .aidefense/.langchain_ready' > /dev/null 2>&1 &
 disown
 
 echo "✓ Dependency installation started in background"

@@ -64,10 +64,10 @@ except ImportError:
         print("Attempting automatic installation...")
         
         # Docker-compatible installation with ignore-installed flag
-        exit_code = os.system("pip3 install --root-user-action=ignore --disable-pip-version-check --ignore-installed langchain langchain-community")
+        exit_code = os.system("pip3 install --disable-pip-version-check --ignore-installed langchain langchain-community")
         if exit_code != 0:
             print("❌ Auto-installation failed. Please install manually:")
-            print("   pip3 install --root-user-action=ignore --disable-pip-version-check --ignore-installed --force-reinstall langchain langchain-community")
+            print("   pip3 install --disable-pip-version-check --ignore-installed --force-reinstall langchain langchain-community")
             sys.exit(1)
         
         print("✅ Installation completed. Continuing with script execution...")

@@ -27,7 +27,7 @@ try:
     from aidefense import ChatInspectionClient, HttpInspectionClient, Config
 except ImportError:
     print("❌ Error: AI Defense SDK not installed")
-    print("Please run: pip install --root-user-action=ignore --disable-pip-version-check cisco-aidefense-sdk")
+    print("Please run: pip install --disable-pip-version-check cisco-aidefense-sdk")
     sys.exit(1)
 
 @dataclass
