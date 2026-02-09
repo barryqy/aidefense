@@ -6,7 +6,7 @@
 set -e
 
 echo "╔════════════════════════════════════════════════════════════╗"
-echo "║     AI Defense Lab - Session Setup                        ║"
+echo "║     AI Defense Lab - Session Setup                         ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -115,7 +115,8 @@ echo "🔧 Installing AI Agent dependencies in background..."
 mkdir -p .aidefense
 
 # Run in true background with nohup
-nohup sh -c 'pip3 install --ignore-installed langchain langchain-community > /dev/null 2>&1 && touch .aidefense/.langchain_ready' > /dev/null 2>&1 &
+nohup sh -c 'pip3 install --root-user-action=ignore --disable-pip-version-check --ignore-installed langchain langchain-community > /dev/null 2>&1 && touch .aidefense/.langchain_ready' > /dev/null 2>&1 &
+disown
 
 echo "✓ Dependency installation started in background"
 echo ""
