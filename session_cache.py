@@ -11,7 +11,7 @@ CACHE_FILE = ".aidefense/.cache"
 
 FIELD_POSITIONS: Dict[str, int] = {
     "primary": 0,
-    "mistral": 1,
+    "legacy_llm": 1,
     "gateway_connection_id": 2,
     "gateway_auth_token": 3,
     "mgmt_api": 4,
@@ -70,7 +70,28 @@ def get_primary_key() -> Optional[str]:
 
 
 def get_mistral_key() -> Optional[str]:
-    return get_cached_value("mistral")
+    return get_legacy_connection_key()
+
+
+def get_legacy_connection_key() -> Optional[str]:
+    return get_cached_value("legacy_llm")
+
+
+def get_lab_llm_api_key() -> Optional[str]:
+    return os.environ.get("LLM_API_KEY")
+
+
+def get_lab_llm_base_url() -> Optional[str]:
+    return os.environ.get("LLM_BASE_URL")
+
+
+def get_lab_llm_model() -> str:
+    return (
+        os.environ.get("LLM_MODEL")
+        or os.environ.get("OPENAI_MODEL")
+        or os.environ.get("MODEL_NAME")
+        or "gpt-4o"
+    )
 
 
 def get_gateway_connection_id() -> Optional[str]:

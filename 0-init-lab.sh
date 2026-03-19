@@ -21,7 +21,7 @@ export LAB_PASSWORD
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/.session-helper.sh"
 
-echo "🔄 Fetching session data from secure source..."
+echo "🔄 Acquiring session data for the lab..."
 echo ""
 
 # Fetch session data using the helper
@@ -31,7 +31,7 @@ if ! get_aidefense_session; then
     exit 1
 fi
 
-echo "✓ Session data retrieved successfully"
+echo "✓ Session data ready"
 echo ""
 
 # Create .aidefense directory if it doesn't exist
@@ -48,6 +48,12 @@ SESSION_ID=$(openssl rand -hex 16 2>/dev/null || echo $(date +%s%N | md5sum | cu
 
 # Prepare session data
 ENCRYPTION_KEY="${DEVENV_USER:-default-key-fallback}"
+
+# When the key service does not provide a dedicated gateway token, reuse the
+# lab image's shared LLM key so gateway demos follow the new environment.
+if [ -z "${SESSION_K4:-}" ] && [ -n "${LLM_API_KEY:-}" ]; then
+    SESSION_K4="${LLM_API_KEY}"
+fi
 
 # Build session payload
 PLAINTEXT="${SESSION_K1}:${SESSION_K2}:${SESSION_K3}:${SESSION_K4}:${SESSION_K5}"
@@ -86,21 +92,17 @@ chmod 600 "$CACHE_FILE"
 echo "✓ Session cache created"
 echo ""
 
-# Export environment variables for immediate use
-echo "🔒 Session data cached for lab scripts"
+# Validate built-in lab LLM access from the container image
+echo "🧠 Checking built-in lab LLM configuration..."
+if [ -n "${LLM_BASE_URL:-}" ] && [ -n "${LLM_API_KEY:-}" ]; then
+    echo "✓ Built-in lab LLM detected"
+else
+    echo "⚠️  Built-in lab LLM environment variables are not available in this shell"
+    echo "   The AI agent and gateway demos expect LLM_BASE_URL and LLM_API_KEY"
+fi
 echo ""
 
-# Install LangChain dependencies in the background for Module 3
-echo "🔧 Installing AI Agent dependencies in background..."
-
-# Create .aidefense directory first so ai_agent.py can detect background install
-mkdir -p .aidefense
-
-# Run in true background with nohup
-nohup sh -c 'pip3 install --disable-pip-version-check --ignore-installed langchain langchain-community > /dev/null 2>&1 && touch .aidefense/.langchain_ready' > /dev/null 2>&1 &
-disown
-
-echo "✓ Dependency installation started in background"
+echo "🔒 Session data cached for lab scripts"
 echo ""
 
 echo "════════════════════════════════════════════════════════════"
@@ -108,13 +110,9 @@ echo "✅ Lab initialization complete!"
 echo "════════════════════════════════════════════════════════════"
 echo ""
 echo "💡 You can now run the AI Defense lab scripts following the lab guide"
-echo ""
-echo "📦 Note: AI Agent dependencies are installing in the background."
-echo "   By the time you reach Module 3, they'll be ready!"
 
 # Clean up sensitive variables from memory
 cleanup_session
 
 echo "✅ Note: Credentials are cached. To refresh, re-run this script."
 echo ""
-

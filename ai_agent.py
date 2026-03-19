@@ -1,127 +1,64 @@
 #!/usr/bin/env python3
 """
-LangChain AI Agent with Database Access and AI Defense Integration
+AI agent with database access and AI Defense integration.
 """
 
-import os
 import sys
+import select
 import sqlite3
 import requests
-import urllib.request
-from typing import List, Dict, Any
+from typing import Dict, Any
 
-from session_cache import get_primary_key, get_mistral_key
+from session_cache import get_lab_llm_api_key, get_lab_llm_base_url, get_lab_llm_model, get_primary_key
 
-# Try importing LangChain components
-try:
-    from langchain.memory import ConversationBufferWindowMemory
-    from langchain.callbacks.base import BaseCallbackHandler
-except ImportError:
-    import time
-    import subprocess
-    
-    # Check if background installation from init script is running
-    marker_file = os.path.join(os.path.dirname(__file__), '.aidefense', '.langchain_ready')
-    
-    # Check if marker file doesn't exist yet (background install may be running)
-    if not os.path.exists(marker_file):
-        # Check if .aidefense directory exists (indicates init script was run)
-        aidefense_dir = os.path.join(os.path.dirname(__file__), '.aidefense')
-        if os.path.exists(aidefense_dir):
-            print("⏳ Dependencies are being installed in the background (started by init script)...")
-            print("   Waiting for installation to complete...")
-            
-            # Wait up to 2 minutes for background installation
-            max_wait = 120  # 2 minutes
-            wait_interval = 2
-            elapsed = 0
-            
-            while elapsed < max_wait:
-                if os.path.exists(marker_file):
-                    print("✅ Background installation completed!")
-                    break
-                
-                # Show progress dots
-                sys.stdout.write('.')
-                sys.stdout.flush()
-                time.sleep(wait_interval)
-                elapsed += wait_interval
-            
-            print("")
-            
-            if not os.path.exists(marker_file):
-                print("⚠️  Background installation taking longer than expected.")
-                print("   Proceeding with manual installation...")
-    
-    # Even if marker exists, verify packages are actually importable
-    # Try importing again in case background install just completed
-    try:
-        from langchain.memory import ConversationBufferWindowMemory
-        from langchain.callbacks.base import BaseCallbackHandler
-    except ImportError:
-        # Packages still not available, do manual install
-        print("❌ LangChain not installed or not in Python path.")
-        print("Attempting automatic installation...")
-        
-        # Docker-compatible installation with ignore-installed flag
-        exit_code = os.system("pip3 install --disable-pip-version-check --ignore-installed langchain langchain-community")
-        if exit_code != 0:
-            print("❌ Auto-installation failed. Please install manually:")
-            print("   pip3 install --disable-pip-version-check --ignore-installed --force-reinstall langchain langchain-community")
-            sys.exit(1)
-        
-        print("✅ Installation completed. Continuing with script execution...")
-        
-        # Import the newly installed modules
-        from langchain.memory import ConversationBufferWindowMemory
-        from langchain.callbacks.base import BaseCallbackHandler
+class SimpleConversationMemory:
+    """Small in-process chat history buffer for the lab demo."""
 
-# Try importing Mistral (via Ollama or API)
-try:
-    import requests
-    MISTRAL_AVAILABLE = True
-except:
-    MISTRAL_AVAILABLE = False
+    def __init__(self, window_size: int = 5):
+        self.window_size = window_size
+        self.messages = []
 
-class AIDefenseCallback(BaseCallbackHandler):
-    """Callback to inspect responses with AI Defense"""
-    
-    def __init__(self):
-        self.api_url = "https://us.api.inspect.aidefense.security.cisco.com/api/v1/inspect/chat"
-        self.api_key = self._load_api_key()
-    
+    def add_user_message(self, message: str):
+        self.messages.append({"role": "user", "content": message})
+        self._trim()
+
+    def add_ai_message(self, message: str):
+        self.messages.append({"role": "assistant", "content": message})
+        self._trim()
+
+    def clear(self):
+        self.messages = []
+
+    def _trim(self):
+        max_messages = self.window_size * 2
+        if len(self.messages) > max_messages:
+            self.messages = self.messages[-max_messages:]
+
+class SimpleLabLLM:
+    """Small OpenAI-compatible wrapper for the lab-provided LLM."""
+
+    def __init__(self, api_key: str = None, base_url: str = None, model: str = None):
+        self.api_key = api_key or self._load_api_key()
+        self.base_url = (base_url or self._load_base_url()).rstrip("/")
+        self.model = model or get_lab_llm_model()
+        self.api_url = f"{self.base_url}/chat/completions"
+
     def _load_api_key(self) -> str:
-        """Load API key from environment or cached file"""
-        key = get_primary_key()
+        key = get_lab_llm_api_key()
         if key:
             return key
-        
-        raise ValueError("AI Defense API key not found. Run '0-init-lab.sh' first to initialize the session.")
-    
-    def on_llm_end(self, response, **kwargs):
-        """Inspect response with AI Defense"""
-        if hasattr(response, 'generations') and response.generations:
-            ai_response = response.generations[0][0].text
-            print(f"🛡️  AI Defense: Response verified safe")
 
-class SimpleMistralLLM:
-    """Simple Mistral API wrapper for LangChain"""
-    
-    def __init__(self, api_key: str = None, model: str = "mistral-small-latest"):
-        self.api_key = api_key or self._load_mistral_key()
-        self.model = model
-        self.api_url = "https://api.mistral.ai/v1/chat/completions"
-    
-    def _load_mistral_key(self) -> str:
-        """Load Mistral API key from environment or cached file"""
-        key = get_mistral_key()
-        if key:
-            return key
-        
-        raise ValueError("Mistral API key not found. Run '0-init-lab.sh' first to initialize the session.")
-    
+        raise ValueError("Lab LLM API key not found. Check that LLM_API_KEY is available in this shell.")
+
+    def _load_base_url(self) -> str:
+        base_url = get_lab_llm_base_url()
+        if base_url:
+            return base_url
+
+        raise ValueError("Lab LLM base URL not found. Check that LLM_BASE_URL is available in this shell.")
+
     def __call__(self, prompt: str, database_context: str = "", **kwargs) -> str:
-        """Call Mistral API with database context"""
+        """Call the lab LLM with optional database context."""
         try:
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
@@ -143,12 +80,12 @@ class SimpleMistralLLM:
                 "max_tokens": 150,
                 "temperature": 0.7
             }
-            
+
             response = requests.post(self.api_url, headers=headers, json=data, timeout=30)
             response.raise_for_status()
-            
+
             return response.json()["choices"][0]["message"]["content"].strip()
-            
+
         except requests.exceptions.RequestException as e:
             if "429" in str(e) or "Too Many Requests" in str(e):
                 return "⚠️  Rate limit reached. Please try again later."
@@ -220,10 +157,10 @@ class AIDefenseClient:
             return {"error": f"AI Defense inspection failed: {str(e)}"}
 
 class BarryBotAgent:
-    """Simple AI Agent using LangChain with Mistral"""
-    
-    def __init__(self, use_mistral: bool = True, use_ai_defense: bool = True, security_action: str = 'block'):
-        self.use_mistral = use_mistral
+    """Simple AI agent using the lab LLM and optional AI Defense."""
+
+    def __init__(self, use_llm: bool = True, use_ai_defense: bool = True, security_action: str = 'block'):
+        self.use_llm = use_llm
         self.use_ai_defense = use_ai_defense
         self.security_action = security_action  # 'block' (default), 'warn', or 'log'
         self.setup_database()
@@ -262,31 +199,24 @@ class BarryBotAgent:
         conn.close()
     
     def setup_agent(self):
-        """Setup LangChain agent with Mistral"""
-        if self.use_mistral:
-            print("🤖 Using Mistral LLM")
-            self.llm = SimpleMistralLLM()
+        """Set up the BarryBot agent and local state."""
+        self.llm = None
+        if self.use_llm:
+            try:
+                self.llm = SimpleLabLLM()
+                print(f"🤖 Using built-in lab LLM ({self.llm.model})")
+            except ValueError as err:
+                print(f"⚠️  Built-in lab LLM unavailable: {err}")
+                print("🤖 Falling back to deterministic lab responses")
         else:
             print("🤖 Using test mode (no LLM)")
-            self.llm = None
-        
-        # Setup memory (suppress deprecation warning)
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            self.memory = ConversationBufferWindowMemory(
-                memory_key="chat_history",
-                k=5,
-                return_messages=True
-            )
-        
-        # Setup AI Defense callback only if enabled
+
+        self.memory = SimpleConversationMemory(window_size=5)
+
         if self.use_ai_defense:
             self.ai_defense = AIDefenseClient()
-            self.ai_defense_callback = AIDefenseCallback()
         else:
             self.ai_defense = None
-            self.ai_defense_callback = None
         
         # Store database connection for queries
         self.db_connection = sqlite3.connect("users.db", check_same_thread=False)
@@ -303,6 +233,10 @@ class BarryBotAgent:
             
             # Determine what to search for based on user input
             user_input_lower = user_input.lower()
+            wants_email = "email" in user_input_lower
+            wants_phone = "phone" in user_input_lower
+            wants_ssn = "ssn" in user_input_lower or "social security" in user_input_lower
+            asks_for_directory = any(word in user_input_lower for word in ["user", "users", "people", "database"])
             
             if "all" in user_input_lower and ("user" in user_input_lower or "people" in user_input_lower):
                 # Get all users
@@ -333,11 +267,18 @@ class BarryBotAgent:
                 if results:
                     formatted_results = "Found users:\n"
                     for row in results:
-                        formatted_results += f"- {row[0]} {row[1]}: Email: {row[2]}, Phone: {row[3]}, SSN: {row[4]}\n"
+                        if wants_ssn:
+                            formatted_results += f"- {row[0]} {row[1]}: SSN: {row[4]}\n"
+                        elif wants_phone:
+                            formatted_results += f"- {row[0]} {row[1]}: Phone: {row[3]}\n"
+                        elif wants_email:
+                            formatted_results += f"- {row[0]} {row[1]}: Email: {row[2]}\n"
+                        else:
+                            formatted_results += f"- {row[0]} {row[1]}: Email: {row[2]}, Phone: {row[3]}\n"
                     return formatted_results.strip()
             
             # Search for email-related queries
-            if "email" in user_input_lower:
+            if wants_email:
                 cursor.execute("SELECT first_name, last_name, email FROM users")
                 results = cursor.fetchall()
                 if results:
@@ -347,11 +288,20 @@ class BarryBotAgent:
                     return formatted_results.strip()
             
             # Search for phone-related queries
-            if "phone" in user_input_lower:
+            if wants_phone:
                 cursor.execute("SELECT first_name, last_name, phone FROM users")
                 results = cursor.fetchall()
                 if results:
                     formatted_results = "User phone numbers:\n"
+                    for row in results:
+                        formatted_results += f"- {row[0]} {row[1]}: {row[2]}\n"
+                    return formatted_results.strip()
+
+            if wants_ssn and asks_for_directory:
+                cursor.execute("SELECT first_name, last_name, ssn FROM users")
+                results = cursor.fetchall()
+                if results:
+                    formatted_results = "User SSNs:\n"
                     for row in results:
                         formatted_results += f"- {row[0]} {row[1]}: {row[2]}\n"
                     return formatted_results.strip()
@@ -363,6 +313,17 @@ class BarryBotAgent:
             return f"Database error: {str(e)}"
         except Exception as e:
             return f"Error querying database: {str(e)}"
+
+    def local_fallback(self, message: str, database_context: str = "") -> str:
+        """Keep the lab demo usable when the shared LLM is unavailable."""
+        if database_context:
+            return database_context
+
+        message_lower = message.lower()
+        if "joke" in message_lower:
+            return "Why do programmers mix up Halloween and Christmas? Because OCT 31 == DEC 25."
+
+        return "I couldn't reach the lab LLM right now, but the AI Defense checks still ran."
     
     def chat(self, message: str, skip_prompt_check: bool = False) -> Dict[str, Any]:
         """Process chat message with optional AI Defense"""
@@ -389,12 +350,18 @@ class BarryBotAgent:
             # Query database for relevant information
             database_context = self.query_database(message)
             
-            # Use Mistral LLM with database context
-            response = self.llm(message, database_context=database_context)
+            if database_context:
+                response = database_context
+            elif self.llm:
+                response = self.llm(message, database_context=database_context)
+                if response.startswith("⚠️  API Error:") or response.startswith("⚠️  Unexpected error:"):
+                    response = self.local_fallback(message, database_context=database_context)
+            else:
+                response = self.local_fallback(message, database_context=database_context)
             
             # Add to memory
-            self.memory.chat_memory.add_user_message(message)
-            self.memory.chat_memory.add_ai_message(response)
+            self.memory.add_user_message(message)
+            self.memory.add_ai_message(response)
             
             # Check with AI Defense if enabled
             if self.use_ai_defense and self.ai_defense:
@@ -441,7 +408,7 @@ class BarryBotAgent:
     
     def run_interactive(self):
         """Run interactive chat session"""
-        print("🤖 BarryBot AI Agent with Mistral")
+        print("🤖 BarryBot AI Agent")
         print("=" * 50)
         print("Hi there! 👋")
         print("My name is BarryBot. How can I assist you today?")
@@ -457,7 +424,11 @@ class BarryBotAgent:
         
         while True:
             try:
-                user_input = input("\nYou: ").strip()
+                first_line = input("\nYou: ")
+                lines = [first_line]
+                while select.select([sys.stdin], [], [], 0.05)[0]:
+                    lines.append(sys.stdin.readline().rstrip('\n'))
+                user_input = '\n'.join(lines).strip()
                 
                 if user_input.lower() in ['quit', 'exit', 'q']:
                     print("👋 Goodbye!")
@@ -563,7 +534,7 @@ Contact: bayuan@cisco.com for questions and issues
     # Initialize agent with AI Defense setting and security action
     use_ai_defense = not args.no_ai_defense
     agent = BarryBotAgent(
-        use_mistral=True, 
+        use_llm=True,
         use_ai_defense=use_ai_defense,
         security_action=args.security_action
     )

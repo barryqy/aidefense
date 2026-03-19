@@ -26,6 +26,22 @@ def load_lab_resources():
     return {}
 
 
+def connection_type_label(value):
+    if hasattr(value, "value"):
+        return value.value
+    return str(value)
+
+
+def api_key_counts(client, connection_id):
+    try:
+        raw_keys = client.connections.make_request("GET", f"connections/{connection_id}/keys")
+        items = raw_keys.get("keys", {}).get("items", [])
+        active_keys = sum(1 for item in items if item.get("status") == "Active")
+        return active_keys, len(items)
+    except Exception:
+        return None, None
+
+
 def main():
     # Load configuration
     api_key = _load_config()
@@ -67,19 +83,20 @@ def main():
             if apps_resp.applications.items:
                 # Categorize by type
                 agents = []
-                llms = []
+                protected_services = []
                 knowledge_bases = []
                 other = []
                 
                 for app in apps_resp.applications.items:
                     name_lower = app.application_name.lower()
                     desc_lower = (app.description or "").lower()
+                    conn_type = connection_type_label(app.connection_type).lower()
                     
                     # Categorize based on name and description
-                    if any(keyword in name_lower for keyword in ['bot', 'agent', 'assistant', 'barry']):
+                    if "gateway" in conn_type or any(keyword in name_lower + desc_lower for keyword in ['gateway', 'gpt', 'claude', 'llm', 'model']):
+                        protected_services.append(app)
+                    elif any(keyword in name_lower for keyword in ['bot', 'agent', 'assistant', 'barry']):
                         agents.append(app)
-                    elif any(keyword in name_lower + desc_lower for keyword in ['mistral', 'gpt', 'claude', 'llm', 'gateway']):
-                        llms.append(app)
                     elif any(keyword in name_lower + desc_lower for keyword in ['knowledge', 'rag', 'vector', 'database']):
                         knowledge_bases.append(app)
                     else:
@@ -93,19 +110,16 @@ def main():
                         print(f"   {i}. {app.application_name}{lab_marker}")
                         if app.description:
                             print(f"      Description: {app.description}")
-                        conn_type = app.connection_type.value if hasattr(app.connection_type, 'value') else str(app.connection_type)
-                        print(f"      Integration: {conn_type}")
+                        print(f"      Integration: {connection_type_label(app.connection_type)}")
                 
-                # Display LLMs
-                if llms:
-                    print("\n🧠 Large Language Models (LLMs):")
-                    for i, app in enumerate(llms, 1):
+                if protected_services:
+                    print("\n🧠 Protected Model Services:")
+                    for i, app in enumerate(protected_services, 1):
                         lab_marker = " [LAB]" if app.application_id in lab_app_ids else ""
                         print(f"   {i}. {app.application_name}{lab_marker}")
                         if app.description:
                             print(f"      Description: {app.description}")
-                        conn_type = app.connection_type.value if hasattr(app.connection_type, 'value') else str(app.connection_type)
-                        print(f"      Integration: {conn_type}")
+                        print(f"      Integration: {connection_type_label(app.connection_type)}")
                 
                 # Display Knowledge Bases
                 if knowledge_bases:
@@ -115,8 +129,7 @@ def main():
                         print(f"   {i}. {app.application_name}{lab_marker}")
                         if app.description:
                             print(f"      Description: {app.description}")
-                        conn_type = app.connection_type.value if hasattr(app.connection_type, 'value') else str(app.connection_type)
-                        print(f"      Integration: {conn_type}")
+                        print(f"      Integration: {connection_type_label(app.connection_type)}")
                 
                 # Display Other Assets
                 if other:
@@ -126,8 +139,7 @@ def main():
                         print(f"   {i}. {app.application_name}{lab_marker}")
                         if app.description:
                             print(f"      Description: {app.description}")
-                        conn_type = app.connection_type.value if hasattr(app.connection_type, 'value') else str(app.connection_type)
-                        print(f"      Integration: {conn_type}")
+                        print(f"      Integration: {connection_type_label(app.connection_type)}")
                 
                 print(f"\n   Total AI Assets: {apps_resp.applications.paging.total}")
             else:
@@ -155,9 +167,9 @@ def main():
                     
                     # Try to get API keys count
                     try:
-                        keys = client.connections.get_api_keys(conn.connection_id)
-                        active_keys = sum(1 for k in keys.items if k.status == "Active")
-                        print(f"   API Keys: {active_keys} active, {len(keys.items)} total")
+                        active_keys, total_keys = api_key_counts(client, conn.connection_id)
+                        if total_keys is not None:
+                            print(f"   API Keys: {active_keys} active, {total_keys} total")
                     except:
                         pass
                 
@@ -180,7 +192,7 @@ def main():
             
             print(f"Total AI Assets: {total_assets}")
             print(f"  - AI Agents: {len(agents) if 'agents' in locals() else 0}")
-            print(f"  - LLMs: {len(llms) if 'llms' in locals() else 0}")
+            print(f"  - Protected Model Services: {len(protected_services) if 'protected_services' in locals() else 0}")
             print(f"  - Knowledge Bases: {len(knowledge_bases) if 'knowledge_bases' in locals() else 0}")
             print(f"  - Other Assets: {len(other) if 'other' in locals() else 0}")
             print(f"\nActive Connections: {conn_count}")
@@ -207,4 +219,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

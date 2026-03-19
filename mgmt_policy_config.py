@@ -23,35 +23,26 @@ def list_policies(client):
     print()
     
     list_policies_req = ListPoliciesRequest(limit=20, expanded=True, order="desc")
-    policies_resp = client.policies.list_policies(list_policies_req)
-    
-    if not policies_resp.items:
+    raw_resp = client.policies.make_request("GET", "policies", params=list_policies_req.to_params())
+    policies = raw_resp.get("policies", {}).get("items", [])
+    total = raw_resp.get("policies", {}).get("paging", {}).get("total", len(policies))
+
+    if not policies:
         print("No policies found")
         return
     
-    for i, policy in enumerate(policies_resp.items, 1):
-        print(f"{i}. {policy.policy_name}")
-        print(f"   Policy ID: {policy.policy_id}")
-        if policy.description:
-            print(f"   Description: {policy.description}")
-        print(f"   Status: {policy.status}")
-        
-        # Display guardrails
-        if hasattr(policy, 'guardrails') and policy.guardrails and policy.guardrails.items:
-            print(f"   Guardrails ({len(policy.guardrails.items)}):")
-            for guardrail in policy.guardrails.items:
-                print(f"      - {guardrail.guardrails_type}")
-        
-        # Display connections if available
-        if hasattr(policy, 'connections') and policy.connections:
-            if policy.connections.items:
-                print(f"   Associated Connections: {len(policy.connections.items)}")
-            else:
-                print("   Associated Connections: None")
-        
+    for i, policy in enumerate(policies, 1):
+        if isinstance(policy, dict):
+            print(f"{i}. {policy.get('policy_name', 'Unnamed Policy')}")
+            print(f"   Policy ID: {policy.get('policy_id', 'Unknown')}")
+            if policy.get('description'):
+                print(f"   Description: {policy['description']}")
+            print(f"   Status: {policy.get('status', 'Unknown')}")
+            if policy.get('connection_type'):
+                print(f"   Connection Type: {policy['connection_type']}")
         print()
     
-    print(f"Total: {policies_resp.paging.total} policies")
+    print(f"Total: {total} policies")
 
 
 def get_policy(client, policy_id):
@@ -228,4 +219,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

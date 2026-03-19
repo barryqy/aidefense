@@ -26,6 +26,22 @@ def load_lab_resources():
     return {}
 
 
+def connection_type_label(value):
+    if hasattr(value, "value"):
+        return value.value
+    return str(value)
+
+
+def api_key_counts(client, connection_id):
+    try:
+        raw_keys = client.connections.make_request("GET", f"connections/{connection_id}/keys")
+        items = raw_keys.get("keys", {}).get("items", [])
+        active_keys = sum(1 for item in items if item.get("status") == "Active")
+        return active_keys, len(items)
+    except Exception:
+        return None, None
+
+
 def main():
     # Load configuration
     api_key = _load_config()
@@ -74,8 +90,7 @@ def main():
                         print(f"   Description: {app.description}")
                     # Handle connection_type which might be enum or string
                     if hasattr(app, 'connection_type') and app.connection_type:
-                        conn_type = app.connection_type.value if hasattr(app.connection_type, 'value') else str(app.connection_type)
-                        print(f"   Connection Type: {conn_type}")
+                        print(f"   Connection Type: {connection_type_label(app.connection_type)}")
                     if hasattr(app, 'created_at') and app.created_at:
                         print(f"   Created: {app.created_at}")
                 
@@ -105,9 +120,9 @@ def main():
                     
                     # Try to get API keys count
                     try:
-                        keys = client.connections.get_api_keys(conn.connection_id)
-                        active_keys = sum(1 for k in keys.items if k.status == "Active")
-                        print(f"   API Keys: {active_keys} active, {len(keys.items)} total")
+                        active_keys, total_keys = api_key_counts(client, conn.connection_id)
+                        if total_keys is not None:
+                            print(f"   API Keys: {active_keys} active, {total_keys} total")
                     except:
                         pass
                 
@@ -124,22 +139,22 @@ def main():
         print("-" * 70)
         try:
             list_policies_req = ListPoliciesRequest(limit=20, expanded=False, order="desc")
-            policies_resp = client.policies.list_policies(list_policies_req)
+            raw_resp = client.policies.make_request("GET", "policies", params=list_policies_req.to_params())
+            policies = raw_resp.get("policies", {}).get("items", [])
+            policy_count = raw_resp.get("policies", {}).get("paging", {}).get("total", len(policies))
             
-            if policies_resp.items:
-                for i, policy in enumerate(policies_resp.items, 1):
-                    print(f"\n{i}. {policy.policy_name}")
-                    print(f"   Policy ID: {policy.policy_id}")
-                    if policy.description:
-                        print(f"   Description: {policy.description}")
-                    if policy.status:
-                        print(f"   Status: {policy.status}")
-                    
-                    # Count guardrails if available
-                    if hasattr(policy, 'guardrails') and policy.guardrails and policy.guardrails.items:
-                        print(f"   Guardrails: {len(policy.guardrails.items)} configured")
+            if policies:
+                for i, policy in enumerate(policies, 1):
+                    print(f"\n{i}. {policy.get('policy_name', 'Unnamed Policy')}")
+                    print(f"   Policy ID: {policy.get('policy_id', 'Unknown')}")
+                    if policy.get('description'):
+                        print(f"   Description: {policy['description']}")
+                    if policy.get('status'):
+                        print(f"   Status: {policy['status']}")
+                    if policy.get('connection_type'):
+                        print(f"   Connection Type: {policy['connection_type']}")
                 
-                print(f"\n   Total: {policies_resp.paging.total} policies")
+                print(f"\n   Total: {policy_count} policies")
             else:
                 print("   No policies found")
         except Exception as e:
@@ -155,7 +170,7 @@ def main():
         try:
             app_count = apps_resp.applications.paging.total if 'apps_resp' in locals() else 0
             conn_count = conns_resp.paging.total if 'conns_resp' in locals() else 0
-            policy_count = policies_resp.paging.total if 'policies_resp' in locals() else 0
+            policy_count = policy_count if 'policy_count' in locals() else 0
             
             print(f"Applications: {app_count}")
             print(f"Connections: {conn_count}")
@@ -183,4 +198,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
