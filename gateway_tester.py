@@ -21,8 +21,9 @@ import argparse
 from session_cache import (
     get_gateway_connection_id,
     get_gateway_auth_token,
+    get_gateway_auth_source,
     get_legacy_connection_key,
-    get_lab_llm_model,
+    get_gateway_model,
 )
 
 # Disable urllib3 warnings directly
@@ -46,10 +47,11 @@ class AIDefenseGatewayTester:
         
         # Authentication for the gateway connection.
         self.auth_token = self._load_auth_token()
+        self.auth_source = get_gateway_auth_source() or "unknown"
         self.enable_compat_gateway = os.environ.get(
             "AIDEFENSE_ENABLE_COMPAT_GATEWAY_FALLBACK", ""
         ).strip().lower() in {"1", "true", "yes", "on"}
-        self.compat_auth_token = get_legacy_connection_key() if self.enable_compat_gateway else None
+        self.compat_auth_token = None
         
         # Statistics tracking
         self.stats = {
@@ -61,9 +63,19 @@ class AIDefenseGatewayTester:
             'session_start': datetime.now()
         }
 
-        self.model_name = get_lab_llm_model()
-        self.compat_model_name = "mistral-small-latest" if self.enable_compat_gateway else ""
+        self.model_name = get_gateway_model()
+        self.compat_model_name = ""
         self.display_model_name = "Protected gateway model"
+
+        legacy_connection_key = get_legacy_connection_key()
+        if (
+            self.enable_compat_gateway
+            and self.auth_source == "dedicated"
+            and legacy_connection_key
+            and legacy_connection_key != self.auth_token
+        ):
+            self.compat_auth_token = legacy_connection_key
+            self.compat_model_name = "mistral-small-latest"
         
         # Load test scenarios
         self.test_scenarios = self._get_test_scenarios()
@@ -82,8 +94,8 @@ class AIDefenseGatewayTester:
             return token
 
         raise ValueError(
-            "Dedicated gateway auth token not found. "
-            "Run '0-init-lab.sh' first and confirm the session includes SESSION_K4."
+            "Gateway auth token not found. "
+            "Run '0-init-lab.sh' first and confirm the session includes a gateway-capable connection key."
         )
     
     def _get_test_scenarios(self):
@@ -284,6 +296,8 @@ class AIDefenseGatewayTester:
         print("🛡️  AI DEFENSE GATEWAY INTERACTIVE TESTER")
         print("=" * 60)
         print(f"🔗 Gateway: AI Defense Protected {self.display_model_name}")
+        print(f"🤖 Model: {self.model_name}")
+        print(f"🔑 Auth source: {self.auth_source}")
         print("🌐 Endpoint: us.gateway.aidefense.security.cisco.com")
         if self.enable_compat_gateway:
             print("🧪 Compatibility fallback: enabled (legacy Mistral path)")

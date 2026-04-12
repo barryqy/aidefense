@@ -93,10 +93,18 @@ chmod 600 "$CACHE_FILE"
 echo "✓ Session cache created"
 echo ""
 
-if [ -z "${SESSION_K4:-}" ]; then
-    echo "⚠️  No dedicated gateway token was returned for this session."
+if [ -n "${SESSION_K4:-}" ]; then
+    echo "✓ Dedicated gateway token detected for this session."
+    echo ""
+elif [ -n "${SESSION_K2:-}" ]; then
+    echo "✓ Using the preconfigured gateway connection key from the session payload."
+    echo "   The gateway module will keep using its protected Mistral connection unless you"
+    echo "   override it with AIDEFENSE_GATEWAY_MODEL."
+    echo ""
+else
+    echo "⚠️  No gateway-capable connection key was returned for this session."
     echo "   BarryBot can still use the built-in lab LLM, but gateway tests will stay disabled"
-    echo "   until the key service provides SESSION_K4."
+    echo "   until the key service provides a usable gateway credential."
     echo ""
 fi
 

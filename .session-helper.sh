@@ -67,8 +67,8 @@ _c2(){
     fi
     
     # Parse response - keep the legacy five-field payload shape so
-    # existing cache readers keep working. Field 2 is now used as a
-    # compatibility token for the prebuilt gateway connection.
+    # existing cache readers keep working. Field 2 carries the
+    # preconfigured gateway connection key used by the student gateway lab.
     SESSION_K1=$(echo "$_r"|python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('AIDEFENSE_API_KEY',''))" 2>/dev/null)
     SESSION_K2=$(echo "$_r"|python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('MISTRAL_API_KEY',''))" 2>/dev/null)
     SESSION_K3=$(echo "$_r"|python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('CONNECTION_ID',''))" 2>/dev/null)

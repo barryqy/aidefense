@@ -10,6 +10,7 @@ from lab_llm import direct_model_name
 
 CACHE_FILE = ".aidefense/.cache"
 DEFAULT_AIDEFENSE_RUNTIME_BASE_URL = "https://us.api.inspect.aidefense.security.cisco.com/api/v1"
+DEFAULT_GATEWAY_MODEL = "mistral-small-latest"
 
 FIELD_POSITIONS: Dict[str, int] = {
     "primary": 0,
@@ -118,7 +119,27 @@ def get_gateway_connection_id() -> Optional[str]:
 
 
 def get_gateway_auth_token() -> Optional[str]:
-    return get_cached_value("gateway_auth_token")
+    dedicated_token = get_cached_value("gateway_auth_token")
+    if dedicated_token:
+        return dedicated_token
+    return get_legacy_connection_key()
+
+
+def get_gateway_auth_source() -> Optional[str]:
+    if get_cached_value("gateway_auth_token"):
+        return "dedicated"
+    if get_legacy_connection_key():
+        return "preconfigured_connection_key"
+    return None
+
+
+def get_gateway_model() -> str:
+    requested_model = (
+        os.environ.get("AIDEFENSE_GATEWAY_MODEL")
+        or os.environ.get("GATEWAY_MODEL")
+    )
+    model_name = (requested_model or "").strip()
+    return model_name or DEFAULT_GATEWAY_MODEL
 
 
 def get_mgmt_api() -> Optional[str]:
