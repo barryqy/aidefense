@@ -6,8 +6,10 @@ Reads and decrypts the session token from .aidefense/.cache.
 from typing import Optional, List, Dict
 import os
 import base64
+from lab_llm import direct_model_name
 
 CACHE_FILE = ".aidefense/.cache"
+DEFAULT_AIDEFENSE_RUNTIME_BASE_URL = "https://us.api.inspect.aidefense.security.cisco.com/api/v1"
 
 FIELD_POSITIONS: Dict[str, int] = {
     "primary": 0,
@@ -30,6 +32,23 @@ def _get_session_token() -> Optional[str]:
     except Exception:
         pass
     return None
+
+
+def _read_cache_map() -> Dict[str, str]:
+    values: Dict[str, str] = {}
+    if not os.path.exists(CACHE_FILE):
+        return values
+    try:
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                raw = line.strip()
+                if not raw or raw.startswith("#") or "=" not in raw:
+                    continue
+                key, value = raw.split("=", 1)
+                values[key] = value
+    except Exception:
+        return {}
+    return values
 
 
 def _decode_session_token(token: str) -> Optional[str]:
@@ -86,12 +105,12 @@ def get_lab_llm_base_url() -> Optional[str]:
 
 
 def get_lab_llm_model() -> str:
-    return (
+    requested_model = (
         os.environ.get("LLM_MODEL")
         or os.environ.get("OPENAI_MODEL")
         or os.environ.get("MODEL_NAME")
-        or "gpt-4o"
     )
+    return direct_model_name(requested_model)
 
 
 def get_gateway_connection_id() -> Optional[str]:
@@ -104,3 +123,21 @@ def get_gateway_auth_token() -> Optional[str]:
 
 def get_mgmt_api() -> Optional[str]:
     return get_cached_value("mgmt_api")
+
+
+def get_aidefense_runtime_base_url() -> str:
+    return _read_cache_map().get("aidefense_runtime_base_url") or DEFAULT_AIDEFENSE_RUNTIME_BASE_URL
+
+
+def get_aidefense_real_runtime_base_url() -> str:
+    return _read_cache_map().get("aidefense_real_runtime_base_url") or get_aidefense_runtime_base_url()
+
+
+def get_aidefense_notice() -> Optional[str]:
+    notice_b64 = _read_cache_map().get("aidefense_runtime_notice_b64")
+    if not notice_b64:
+        return None
+    try:
+        return base64.b64decode(notice_b64).decode("utf-8")
+    except Exception:
+        return None

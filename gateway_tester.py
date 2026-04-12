@@ -21,7 +21,6 @@ import argparse
 from session_cache import (
     get_gateway_connection_id,
     get_gateway_auth_token,
-    get_lab_llm_api_key,
     get_legacy_connection_key,
     get_lab_llm_model,
 )
@@ -47,7 +46,10 @@ class AIDefenseGatewayTester:
         
         # Authentication for the gateway connection.
         self.auth_token = self._load_auth_token()
-        self.compat_auth_token = get_legacy_connection_key()
+        self.enable_compat_gateway = os.environ.get(
+            "AIDEFENSE_ENABLE_COMPAT_GATEWAY_FALLBACK", ""
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.compat_auth_token = get_legacy_connection_key() if self.enable_compat_gateway else None
         
         # Statistics tracking
         self.stats = {
@@ -60,7 +62,7 @@ class AIDefenseGatewayTester:
         }
 
         self.model_name = get_lab_llm_model()
-        self.compat_model_name = "mistral-small-latest"
+        self.compat_model_name = "mistral-small-latest" if self.enable_compat_gateway else ""
         self.display_model_name = "Protected gateway model"
         
         # Load test scenarios
@@ -79,15 +81,10 @@ class AIDefenseGatewayTester:
         if token:
             return token
 
-        llm_key = get_lab_llm_api_key()
-        if llm_key:
-            return llm_key
-
-        compat_token = get_legacy_connection_key()
-        if compat_token:
-            return compat_token
-
-        raise ValueError("Gateway auth token not found. Run '0-init-lab.sh' first to initialize the session.")
+        raise ValueError(
+            "Dedicated gateway auth token not found. "
+            "Run '0-init-lab.sh' first and confirm the session includes SESSION_K4."
+        )
     
     def _get_test_scenarios(self):
         """Get test scenarios for automated testing"""
@@ -250,7 +247,8 @@ class AIDefenseGatewayTester:
         used_compat = False
 
         should_retry = (
-            result['status'] == 'error'
+            self.enable_compat_gateway
+            and result['status'] == 'error'
             and result.get('response_code') in [400, 401, 411]
             and self.compat_auth_token
         )
@@ -287,6 +285,10 @@ class AIDefenseGatewayTester:
         print("=" * 60)
         print(f"🔗 Gateway: AI Defense Protected {self.display_model_name}")
         print("🌐 Endpoint: us.gateway.aidefense.security.cisco.com")
+        if self.enable_compat_gateway:
+            print("🧪 Compatibility fallback: enabled (legacy Mistral path)")
+        else:
+            print("🧪 Compatibility fallback: disabled")
         print("⚡ Commands: /help, /test, /stats, /quit")
         print("💡 Enter your prompts to test the gateway protection")
         print("-" * 60)

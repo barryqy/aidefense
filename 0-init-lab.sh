@@ -49,11 +49,9 @@ SESSION_ID=$(openssl rand -hex 16 2>/dev/null || echo $(date +%s%N | md5sum | cu
 # Prepare session data
 ENCRYPTION_KEY="${DEVENV_USER:-default-key-fallback}"
 
-# When the key service does not provide a dedicated gateway token, reuse the
-# lab image's shared LLM key so gateway demos follow the new environment.
-if [ -z "${SESSION_K4:-}" ] && [ -n "${LLM_API_KEY:-}" ]; then
-    SESSION_K4="${LLM_API_KEY}"
-fi
+SESSION_RUNTIME_BASE_URL="${SESSION_RUNTIME_BASE_URL:-https://us.api.inspect.aidefense.security.cisco.com/api/v1}"
+SESSION_REAL_RUNTIME_BASE_URL="${SESSION_REAL_RUNTIME_BASE_URL:-$SESSION_RUNTIME_BASE_URL}"
+SESSION_RUNTIME_NOTICE_B64=$(printf '%s' "${SESSION_RUNTIME_NOTICE:-}" | base64 | tr -d '\n')
 
 # Build session payload
 PLAINTEXT="${SESSION_K1}:${SESSION_K2}:${SESSION_K3}:${SESSION_K4}:${SESSION_K5}"
@@ -85,12 +83,28 @@ cache_version=1.2.4
 sdk_version=1.0.0
 last_sync=$TIMESTAMP
 session_token=$ENCRYPTED
+aidefense_runtime_base_url=$SESSION_RUNTIME_BASE_URL
+aidefense_real_runtime_base_url=$SESSION_REAL_RUNTIME_BASE_URL
+aidefense_runtime_notice_b64=$SESSION_RUNTIME_NOTICE_B64
 EOF
 
 chmod 600 "$CACHE_FILE"
 
 echo "✓ Session cache created"
 echo ""
+
+if [ -z "${SESSION_K4:-}" ]; then
+    echo "⚠️  No dedicated gateway token was returned for this session."
+    echo "   BarryBot can still use the built-in lab LLM, but gateway tests will stay disabled"
+    echo "   until the key service provides SESSION_K4."
+    echo ""
+fi
+
+if [ -n "${SESSION_RUNTIME_NOTICE:-}" ]; then
+    echo "🟢 ${SESSION_RUNTIME_NOTICE}"
+    echo "   Real endpoint: ${SESSION_REAL_RUNTIME_BASE_URL}"
+    echo ""
+fi
 
 # Validate built-in lab LLM access from the container image
 echo "🧠 Checking built-in lab LLM configuration..."
