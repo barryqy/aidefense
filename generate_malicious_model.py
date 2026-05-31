@@ -9,7 +9,6 @@ DO NOT unpickle this file directly - it will execute code on your system!
 Only use it for scanning with AI Defense.
 """
 import pickle
-import numpy as np
 
 
 class MaliciousModel:
@@ -20,7 +19,7 @@ class MaliciousModel:
     
     def __init__(self):
         # Legitimate-looking model data
-        self.params = np.array([1.45, 23.1, 24.99])
+        self.params = [1.45, 23.1, 24.99]
     
     def __reduce__(self):
         # This is the exploit: when unpickling, it executes a shell command
@@ -32,7 +31,6 @@ class MaliciousModel:
 def generate_malicious_file(filename='malicious_model.pkl'):
     """Generate the malicious pickle file."""
     
-    # Create a list containing a numpy array and the malicious class
     # This mimics real-world scenarios where model parameters are stored
     data = [MaliciousModel()]
     
@@ -67,4 +65,3 @@ if __name__ == '__main__':
     print(f"   python3 scan_file.py {result}")
     print("\n⚠️  DO NOT unpickle this file directly!")
     print("=" * 70)
-
