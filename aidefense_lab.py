@@ -304,14 +304,14 @@ class AIDefenseLab:
             print("✅ AI Defense SDK imported successfully")
         except ImportError:
             print("❌ AI Defense SDK import failed")
-            return
+            return False
         
         # Connectivity test
         if self.test_connectivity():
             print("✅ AI Defense API connection working")
         else:
             print("❌ AI Defense API connection failed")
-            return
+            return False
         
         # HTTP client test with proper AI service URL
         try:
@@ -324,11 +324,13 @@ class AIDefenseLab:
             print("✅ HTTP inspection client working")
         except Exception as e:
             print(f"⚠️  HTTP client test failed: {str(e)}")
-            print("   Note: AI Defense HTTP inspection is designed for AI service URLs")
-            print("   The HTTP inspection functionality is working correctly")
+            print("❌ Environment validation failed. HTTP inspection did not complete.")
+            input("Press Enter to continue...")
+            return False
         
         print("\n🎉 Environment validation complete!")
         input("Press Enter to continue...")
+        return True
     
     # ========================================
     # ADVANCED FEATURES

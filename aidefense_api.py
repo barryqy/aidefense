@@ -191,14 +191,14 @@ class AIDefenseAPI:
             print("✅ AI Defense SDK imported successfully")
         except ImportError:
             print("❌ AI Defense SDK import failed")
-            return
+            return False
         
         # Connectivity test
         if self.test_connectivity():
             print("✅ AI Defense API connection working")
         else:
             print("❌ AI Defense API connection failed")
-            return
+            return False
         
         # HTTP client test with proper AI service URL
         try:
@@ -211,10 +211,11 @@ class AIDefenseAPI:
             print("✅ HTTP inspection client working")
         except Exception as e:
             print(f"⚠️  HTTP client test failed: {str(e)}")
-            print("   Note: AI Defense HTTP inspection is designed for AI service URLs")
-            print("   The HTTP inspection functionality is working correctly")
+            print("❌ Environment validation failed. HTTP inspection did not complete.")
+            return False
         
         print("\n🎉 Environment validation complete!")
+        return True
 
 def main():
     """Main entry point"""
@@ -270,7 +271,7 @@ Contact: bayuan@cisco.com for questions and issues
         
         # Run requested operation
         if args.environment_validation:
-            api.environment_validation()
+            return 0 if api.environment_validation() else 1
         elif args.threat_simulation:
             api.threat_simulation()
         elif args.prompt_inspection:
@@ -300,4 +301,4 @@ Contact: bayuan@cisco.com for questions and issues
         sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
