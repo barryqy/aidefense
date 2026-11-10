@@ -25,6 +25,7 @@ from dataclasses import dataclass
 
 try:
     from aidefense import ChatInspectionClient, HttpInspectionClient, Config
+    from policy_http import PolicyHttpInspectionClient
 except ImportError:
     print("❌ Error: AI Defense SDK not installed")
     print("Please run: pip install --disable-pip-version-check cisco-aidefense-sdk")
@@ -166,7 +167,7 @@ class AIDefenseLab:
             
             self.current_api_key = api_key
             self.chat_client = ChatInspectionClient(api_key=api_key)
-            self.http_client = HttpInspectionClient(api_key=api_key)
+            self.http_client = PolicyHttpInspectionClient(api_key=api_key)
             
             return True
         except Exception as e:

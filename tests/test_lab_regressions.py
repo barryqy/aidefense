@@ -83,7 +83,7 @@ class ValidationTests(unittest.TestCase):
         with patch.object(aidefense_api, "get_primary_key", return_value="x" * 64):
             api = aidefense_api.AIDefenseAPI()
         self.assertTrue(api.initialize_clients())
-        self.assertIs(type(api.http_client), aidefense_api.HttpInspectionClient)
+        self.assertIs(type(api.http_client), aidefense_api.PolicyHttpInspectionClient)
         return api
 
     def test_http_failure_cannot_report_validation_success(self):
@@ -154,6 +154,105 @@ class ValidationTests(unittest.TestCase):
         self.assertNotIn("functionality is working correctly", output.getvalue())
         self.assertNotIn("Environment validation complete", output.getvalue())
 
+
+
+
+    def test_http_validation_uses_connection_policy_without_rule_overrides(self):
+        api = self.api()
+        sent = []
+
+        def transport(handler, **request):
+            sent.append(request)
+            if request["url"].endswith("/http") and "config" in request["json_data"]:
+                raise RuntimeError("HTTP 400: SDK rule override rejected")
+            return SAFE_RESPONSE
+
+        with (
+            patch("aidefense.request_handler.RequestHandler.request", transport),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            ok = api.environment_validation()
+
+        self.assertIs(ok, True)
+        http = [r for r in sent if r["url"].endswith("/http")]
+        self.assertEqual(len(http), 1)
+        self.assertEqual(http[0]["method"], "POST")
+        self.assertNotIn("config", http[0]["json_data"])
+        self.assertNotIn("policy_id", http[0]["json_data"])
+
+
+    def test_explicit_http_rules_and_policy_are_not_silently_changed(self):
+        from aidefense.runtime.models import InspectionConfig, Rule, RuleName
+
+        api = self.api()
+        overrides = [
+            {"config": InspectionConfig(enabled_rules=[Rule(rule_name=RuleName.MALICIOUS_URL_DETECTION)])},
+            {"policy_id": SCAN_ID},
+        ]
+        for override in overrides:
+            with (
+                self.subTest(override=next(iter(override))),
+                patch("aidefense.request_handler.RequestHandler.request", return_value=SAFE_RESPONSE) as transport,
+            ):
+                api.http_client.inspect_request(
+                    method="POST", url="https://api.openai.com/v1/chat/completions",
+                    headers={"Content-Type": "application/json"},
+                    body={"messages": [{"role": "user", "content": "Hello"}]},
+                    **override,
+                )
+            payload = transport.call_args.kwargs["json_data"]
+            if "config" in override:
+                self.assertEqual(payload["config"]["enabled_rules"][0]["rule_name"], "Malicious URL Detection")
+            else:
+                self.assertEqual(payload["policy_id"], SCAN_ID)
+                self.assertNotIn("config", payload)
+
+
+    def test_interactive_http_probe_uses_the_attached_policy(self):
+        with patch.object(aidefense_lab, "get_primary_key", return_value="x" * 64):
+            lab = aidefense_lab.AIDefenseLab()
+        self.assertTrue(lab.initialize_clients())
+
+        def transport(handler, **request):
+            if request["url"].endswith("/http") and "config" in request["json_data"]:
+                raise RuntimeError("HTTP 400: SDK rule override rejected")
+            return SAFE_RESPONSE
+
+        with (
+            patch("aidefense.request_handler.RequestHandler.request", transport),
+            patch("builtins.input", return_value=""),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            ok = lab.environment_validation()
+        self.assertIs(ok, True)
+
+
+    def test_policy_http_preserves_safe_and_blocked_service_results(self):
+        from aidefense.runtime.models import Action, RuleName
+
+        api = self.api()
+        blocked = {
+            "is_safe": False,
+            "classifications": ["SECURITY_VIOLATION"],
+            "action": "Block",
+            "severity": "HIGH",
+            "rules": [{"rule_name": "Malicious URL Detection", "classification": "SECURITY_VIOLATION"}],
+            "processed_rules": [{"rule_name": "Malicious URL Detection"}],
+        }
+        for payload, safe, action in [(SAFE_RESPONSE, True, Action.ALLOW), (blocked, False, Action.BLOCK)]:
+            with (
+                self.subTest(safe=safe),
+                patch("aidefense.request_handler.RequestHandler.request", return_value=payload),
+            ):
+                result = api.http_client.inspect_request(
+                    method="POST", url="https://api.openai.com/v1/chat/completions",
+                    body={"messages": [{"role": "user", "content": "Synthetic request"}]},
+                )
+            self.assertIs(result.is_safe, safe)
+            self.assertEqual(result.action, action)
+            if not safe:
+                self.assertEqual(result.rules[0].rule_name, RuleName.MALICIOUS_URL_DETECTION)
+                self.assertEqual(result.processed_rules[0].rule_name, RuleName.MALICIOUS_URL_DETECTION)
 
 
 
